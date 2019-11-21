@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # (bash v4 required)
 #
 # metacheck & hashcheck - David Kotz 2019
