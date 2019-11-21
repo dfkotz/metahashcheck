@@ -2,7 +2,9 @@
 # (bash v4 required)
 #
 # metacheck & hashcheck - David Kotz 2019
-# USAGE: see function usage() below. 
+# AVAILABILITY: https://github.com/dfkotz/metahashcheck
+# LICENSE: see LICENSE.md
+# USAGE: see README.md, and function usage() below. 
 #
 # Record metadata for all files in the given directory trees,
 # and compare with the metadata recorded earlier.
