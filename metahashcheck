@@ -1,0 +1,377 @@
+#!/usr/local/bin/bash
+# (bash v4 required)
+#
+# metacheck & hashcheck - David Kotz 2019
+# USAGE: see function usage() below. 
+#
+# Record metadata for all files in the given directory trees,
+# and compare with the metadata recorded earlier.
+#  - When run as 'hashcheck' it records hash & size in '.hashcheck' files;
+#  - When run as 'metacheck' it records time & size in '.metacheck' files.
+#
+# Below "checkfiles" and "$cf" refers to .hashcheck or .metacheck files.
+#  .metacheck.* and .hashcheck.* are temporary files used during operation.
+#  .metacheck-* and .hashcheck-* are retained after verify for use by --accept.
+#
+# When run with --create, we create .metacheck or .hashcheck 
+#   to match the current reality.
+# When run with --verify, we create .metacheck-new or .hashcheck-new 
+#   according to current reality, and compare them with existing checkfiles;
+#   any new, changed, or missing files are noted.
+# When run with --accept, we move .metacheck-new or .hashcheck-new to
+#   replace the current checkfiles.
+# When run with --review, we quickly look to see whether any directory has
+# some files that are newer than its current checkfiles.
+#
+# For use in Lightroom, one might also try the following plugin:
+#    http://bayimages.net/blog/lightroom/validator/
+#
+
+problems=""     # updated if errors, deletions, or changes discovered.
+review=""       # updated during --review with directories needing verify.
+need2accept=""  # updated in cfcompare, with list of dirs that changed.
+
+# Functionality depends on the name of this script:
+case "${0##*/}" in
+hashcheck)
+    progname=hashcheck
+    cf=.hashcheck   # shorthand for the basename of in-directory checkfiles.
+    tmp=/tmp/hashcheck$$  # another scratch file outside of working directories
+    ;;
+metacheck)
+    progname=metacheck
+    cf=.metacheck   # shorthand for the basename of in-directory checkfiles.
+    tmp=/tmp/metacheck$$  # another scratch file outside of working directories
+    ;;
+*)
+    echo "$0: must be named 'hashcheck' or 'metacheck'."
+    exit 1;;
+esac
+
+function usage() {
+cat <<EOF
+ usage:
+   $progname --mode dir...
+ where 'mode' is one of
+   create: create new records from scratch; delete any prior records.
+   verify: verify files against prior records, and report differences.
+   accept: replace prior records with results from a 'verify' pass.
+   review: quickly review dir for presence of files newer than records.
+EOF
+}
+
+# in what mode shall we operate?
+case "$1" in
+    "--create") mode=create;;  # for the first time on a new directory
+    "--accept") mode=accept;;  # to accept results of --verify
+    "--verify") mode=verify;;  # to scan a directory and report changes
+    "--review") mode=review;;  # to review whether --verify is needed
+    *)  usage; exit 1;;
+esac
+shift
+
+# how many directories will we scan?
+if [[ $# -lt 1 ]]; then 
+    usage; exit 2;
+fi
+
+echo $mode records in $# directories...
+
+###################################################################
+# A function for cleaning up our work if interrupted
+# TODO: it cleans up only the current directory. need do others?
+function cleanall {
+    echo cleaning up all files...
+    rm -f $cf.* $cf-*
+}
+function cleantmp {
+    echo cleaning up temp files...
+    rm -f $cf.* $tmp
+}
+function cleanall-and-exit {
+    cleanall
+    exit 99
+}
+
+# this trap will only clean the current directory - not all 
+trap cleanall-and-exit sigint
+
+
+###################################################################
+# A function to create a new checkfile from existing files;
+# creates $cf-new and returns 0 on success, non-zero on error.
+# outputs three columns: 
+# 1 checksum(hash) or last-modification-time
+# 2 size in bytes
+# 3 filename
+function cfcreate {
+    # The difference between hashcheck and metacheck is on xargs line below
+    if [ $progname == hashcheck ]
+    then # hashcheck
+	find . -type f -not -name .\* -print0 \
+	    | xargs -0 cksum \
+	    | sort --key=3 \
+	    > $cf-new \
+	    && return 0
+	# else if error:
+	rm -f $cf-new
+	return 1
+    else # metacheck
+	find . -type f -not -name .\* -print0 \
+	    | xargs -0 stat -f "%m %z %N" \
+	    | sort --key=3 \
+	    > $cf-new \
+	    && return 0
+	# else if error:
+	rm -f $cf-new
+	return 1
+    fi
+}
+
+###################################################################
+# A function to compare a new checkfile with existing checkfile;
+# expects to find $cf and $cf-new, each with three columns:
+# 1 checksum(hash) or last-modification-time
+# 2 size in bytes
+# 3 filename
+# and returns 0 on success, non-zero if any changes detected
+function cfcompare {
+    echo compare with old records...
+    
+    # quickly compare new records with existing records
+    if cmp --quiet $cf $cf-new ; then
+	echo NO ADDITIONS, DELETIONS, OR CHANGES.
+	return 0
+    fi
+
+    # something changed, so we need to look more closely.
+    echo SOMETHING CHANGED! 
+    # we will later recommend accepting the new $cf for this directory.
+    need2accept="$need2accept $dir"
+
+    declare -i added=0 lost=0 changed=0
+    
+    # load the existing checkfile into Old
+    declare -A OldCol1 OldCol2
+    while read col1 col2 name;
+    do OldCol1[$name]=$col1; OldCol2[$name]=$col2;
+    done < $cf
+    
+    # load the new checkfile into New
+    declare -A NewCol1 NewCol2
+    while read col1 col2 name;
+    do NewCol1[$name]=$col1; NewCol2[$name]=$col2;
+    done < $cf-new
+    
+    echo ${#OldCol1[@]} files in Old
+    echo ${#NewCol1[@]} files in New
+    
+    # loop over all the old files to see what disappeared or changed
+    for name in "${!OldCol1[@]}"
+    do
+	if [[ ! -v NewCol1["$name"] ]] ; then
+	    echo "LOST $name"
+	    let lost++
+	elif [[ ${OldCol1["$name"]} -ne ${NewCol1["$name"]} ]] ; then
+	    echo "CHANGED $name"
+	    let changed++
+	elif [[ ${OldCol2["$name"]} -ne ${NewCol2["$name"]} ]] ; then
+	    echo "CHANGED $name"
+	    let changed++
+	fi
+    done
+    
+    # loop over all the new files to see what was added
+    # additions are not necessarily a problem, so don't print the names
+    for name in "${!NewCol1[@]}"
+    do
+	if [[ ! -v OldCol1["$name"] ]] ; then
+	    # echo "ADDED $name"
+	    let added++
+	fi
+    done
+    if [[ $added -gt 0 ]]; then
+	echo "ADDED $added files"
+    fi
+    
+    if [[ $changed -gt 0 ]]; then
+	problems+=" $dir: $changed files changed;"
+    fi
+    if [[ $lost -gt 0 ]]; then
+	problems+=" $dir: $lost files lost;"
+    fi
+    
+    # return the number of changed or lost files (ideally zero)
+    return $(( $changed + $lost ))
+}
+
+###################################################################
+# Execute mode 'create' in current working directory.
+# Required for the first pass over a new directory, to compute records 
+# of all files in the directory tree, and create $cf file.
+function mode-create {
+    if [[ -f $cf ]]; then
+	# don't overrwrite an existing checkfile
+	echo "error: $cf already exists for $dir"
+	echo "skipping $dir..."
+	problems+=" $dir: $hc already exists;"
+	return 1
+    fi
+    
+    if cfcreate; then
+	# save the new file
+	mv -f $cf-new $cf
+	return 0
+    else
+	problems+=" $dir: cfcreate failed;"
+	return 1
+    fi
+}
+
+###################################################################
+# Execute mode 'verify' in current working directory.
+# This time-consuming pass computes new records for all the files
+# in the directory tree, and compares them against the pre-existing
+# records in $cf.  It leaves behind $cf-new;
+# later, if the user decides to accept the changes, the user should
+# run again with --accept.
+function mode-verify {
+    # can't verify if there is not a prior checkfile
+    if [[ ! -f $cf ]]; then
+	echo "error: $cf missing for $dir"
+	echo "to create, $0 --create $dir"
+	echo "skipping $dir..."
+	problems+=" $dir: missing $cf;"
+	return 1
+    fi
+    
+    cfcreate && cfcompare && return 0
+    problems+=" $dir: cfcreate or cfcompare failed;"
+    return 1
+}
+
+###################################################################
+# Execute mode 'accept' in current working directory.
+# Assuming a --verify pass has been run recently on this directory,
+# leaving a $cf-new file behind, this --accept pass simply
+# overwrites $cf with $cf-new.
+function mode-accept {
+    # can't accept if there is not a prior checkfile
+    if [[ ! -f $cf ]]; then
+	echo "error: $cf missing for $dir"
+	echo "to create, $0 --create $dir"
+	echo "skipping $dir..."
+	problems+=" $dir: missing $cf;"
+	return 1
+    fi
+    
+    # can't accept if there is not a new checkfile
+    if [[ ! -f $cf-new ]]; then
+	echo "error: $cf-new missing for $dir"
+	echo "perhaps because you did not run 'verify' first."
+	echo "to create, $0 --verify $dir"
+	echo "skipping $dir..."
+	problems+=" $dir: missing $cf-new;"
+	return 1
+    fi
+    
+    echo updating $cf...
+    mv -f $cf-new $cf
+    return 0
+}
+
+
+###################################################################
+# Execute mode 'review' in current working directory.
+# This scans the directory to see if there are any subdirectories
+# or files that are newer than the $cf file.  If so, that's 
+# a clear sign that the directory needs --verify.  The main script 
+# outputs a suggested commandline.
+function mode-review {
+    # can't review if there is not a prior checkfile
+    if [[ ! -f $cf ]]; then
+	echo "error: $cf missing for $dir"
+	echo "to create, $0 --create $dir"
+	echo "skipping $dir..."
+	problems+=" $dir: missing $cf;"
+	return 1
+    fi
+
+    echo reviewing $dir for files newer than $cf...
+    if ! ( find * -newer $cf > $tmp); then
+	echo "trouble listing files... giving up on $dir"
+	problems+=" $dir: trouble;"
+	return 1
+    fi
+    if [ -s $tmp ]; then
+	return 1     # some files or directories newer than $cf
+    else
+	return 0     # no files or directories newer than $cf
+    fi
+}
+
+
+###################################################################
+######################### main loop ###############################
+
+# loop over all parameters, processing each directory independently
+for dir; do
+    if cd "$dir"; then
+        echo "examine directory $dir"...
+    else
+        echo "skipping $dir" ...
+        problems+=" $dir: error;"
+        continue
+    fi
+    
+    case $mode in
+	create) mode-create;;
+	verify) mode-verify;;
+	accept) mode-accept;;
+	review) mode-review || review="$review $dir";;
+	*) ;;
+    esac
+    
+    echo -n "done... popping back to "
+    cd -   # pop back to where we were before cd $dir
+    echo
+done
+
+if [ $mode == review ]; then
+    if [ "$review" == "" ]; then
+	echo No directories appear to need verification.
+    else
+	echo SEVERAL DIRECTORIES NEED VERIFICATION. Consider running:
+	echo "$progname --verify $review"
+    fi
+fi
+
+if [ "$problems" ]; then
+    echo "Warning: errors or changes found in these directories:"
+    echo "$problems" | tr \; \\n
+    echo "IFF those changes were acceptable, run the following:"
+    echo "$progname --accept $need2accept"
+    exit 3
+else
+    echo "NO PROBLEMS FOUND."
+    if [ "$need2accept" ]; then
+	echo "BUT, some photos were added in some directories."
+	echo "Thus, the following command is recommended:"
+	echo $progname --accept $need2accept
+
+	if [ $progname == hashcheck ]; then
+	    echo "The following command is also recommended:"
+	    echo metacheck --verify $need2accept
+	    echo metacheck --accept $need2accept
+	else
+	    echo "The following command is also recommended:"
+	    echo hashcheck --verify $need2accept
+	    echo hashcheck --accept $need2accept
+	fi
+	# technically not a failure, but exit non-zero to get your attention
+	exit 4
+    else
+	# no problems, and no new files needing acceptance
+	exit 0
+    fi
+fi
