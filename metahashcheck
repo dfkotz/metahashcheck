@@ -46,7 +46,7 @@ metacheck)
     tmp=/tmp/metacheck$$  # another scratch file outside of working directories
     ;;
 *)
-    echo "$0: must be named 'hashcheck' or 'metacheck'."
+    echo "$0: must be run as script named 'hashcheck' or 'metacheck'."
     exit 1;;
 esac
 
@@ -79,6 +79,7 @@ fi
 
 echo $mode records in $# directories...
 
+
 ###################################################################
 # A function for cleaning up our work if interrupted
 # TODO: it cleans up only the current directory. need do others?
@@ -98,6 +99,17 @@ function cleanall-and-exit {
 # this trap will only clean the current directory - not all 
 trap cleanall-and-exit sigint
 
+# what stat "format string" should metacheck record for each file?
+# (sadly, the 'stat' command differs between MacOS and Linux
+if [ $(uname) == Darwin ]; then
+    statSwitch=-f
+    statFormat="%m %z %N"
+else
+    statSwitch=-c
+    statFormat="%Y %s %n"
+fi
+
+# skip down to "main loop" below...
 
 ###################################################################
 # A function to create a new checkfile from existing files;
@@ -120,7 +132,7 @@ function cfcreate {
 	return 1
     else # metacheck
 	find . -type f -not -name .\* -print0 \
-	    | xargs -0 stat -f "%m %z %N" \
+	    | xargs -0 stat "$statSwitch" "$statFormat" \
 	    | sort --key=3 \
 	    > $cf-new \
 	    && return 0
