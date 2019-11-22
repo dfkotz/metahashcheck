@@ -55,7 +55,7 @@ cat <<EOF
  usage:
    $progname --mode dir...
  where 'mode' is one of
-   create: create new records from scratch; delete any prior records.
+   create: create new records from scratch; error if prior records exist.
    verify: verify files against prior records, and report differences.
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
@@ -72,9 +72,15 @@ case "$1" in
 esac
 shift
 
+# on what platform do we operate?
+if [ $(uname) != "Darwin" -a $(uname) != "Linux" ]; then
+    echo Platform $(uname) not supported by this command.
+    exit 2;
+fi
+
 # how many directories will we scan?
 if [[ $# -lt 1 ]]; then 
-    usage; exit 2;
+    usage; exit 3;
 fi
 
 echo $mode records in $# directories...
@@ -113,15 +119,23 @@ trap cleanall-and-exit sigint
 # 2 size in bytes
 # 3 filename
 function cfxargs {
-    if [ $progname == hashcheck ]
-    then # hashcheck
-        xargs -0 cksum
-    else # metacheck
-	# (sadly, the 'stat' command differs between MacOS and Linux.)
-        if [ $(uname) == Darwin ]; then
+    # Sadly, the 'xargs' and 'stat' commands differ between MacOS and Linux.
+    # xargs: on MacOS, empty input does not run the command; on Linux, need -r
+    # stat: format with -f on MacOS and -c on Linux, with different %specifiers
+    if [ $(uname) == Darwin ]
+    then # MacOS
+        if [ $progname == hashcheck ]
+        then # hashcheck
+            xargs -0 cksum
+        else # metacheck
             xargs -0 stat -f "%m %z %N"
-        else
-            xargs -0 stat -c "%Y %s %n"
+        fi
+    else # assume Linux
+        if [ $progname == hashcheck ]
+        then # hashcheck
+            xargs -0 -r cksum
+        else # metacheck
+            xargs -0 -r stat -c "%Y %s %n"
         fi
     fi
 }
