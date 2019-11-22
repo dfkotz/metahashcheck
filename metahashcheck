@@ -99,47 +99,44 @@ function cleanall-and-exit {
 # this trap will only clean the current directory - not all 
 trap cleanall-and-exit sigint
 
-# what stat "format string" should metacheck record for each file?
-# (sadly, the 'stat' command differs between MacOS and Linux
-if [ $(uname) == Darwin ]; then
-    statSwitch=-f
-    statFormat="%m %z %N"
-else
-    statSwitch=-c
-    statFormat="%Y %s %n"
-fi
+# next: several functions.  skip down to "main loop" below...
 
-# skip down to "main loop" below...
 
 ###################################################################
-# A function to create a new checkfile from existing files;
-# creates $cf-new and returns 0 on success, non-zero on error.
+# A function to push null-terminated filenames, from stdin,
+# through 'xargs' with a commandline appropriate to our mode of operation
+# and to the platform on which we run.  This function is where
+# metacheck and hashcheck actually differ!
+# No arguments expected; stdin should be result of `find... -print0`.
 # outputs three columns: 
 # 1 checksum(hash) or last-modification-time
 # 2 size in bytes
 # 3 filename
-function cfcreate {
-    # The difference between hashcheck and metacheck is on xargs line below
+function cfxargs {
     if [ $progname == hashcheck ]
     then # hashcheck
-	find . -type f -not -name .\* -print0 \
-	    | xargs -0 cksum \
-	    | sort --key=3 \
-	    > $cf-new \
-	    && return 0
-	# else if error:
-	rm -f $cf-new
-	return 1
+        xargs -0 cksum
     else # metacheck
-	find . -type f -not -name .\* -print0 \
-	    | xargs -0 stat "$statSwitch" "$statFormat" \
-	    | sort --key=3 \
-	    > $cf-new \
-	    && return 0
-	# else if error:
-	rm -f $cf-new
-	return 1
+	# (sadly, the 'stat' command differs between MacOS and Linux.)
+        if [ $(uname) == Darwin ]; then
+            xargs -0 stat -f "%m %z %N"
+        else
+            xargs -0 stat -c "%Y %s %n"
+        fi
     fi
+}
+
+
+###################################################################
+# A function to create a new checkfile from existing files;
+# creates $cf-new and returns 0 on success, non-zero on error.
+function cfcreate {
+    find . -type f -not -name .\* -print0 | cfxargs | sort --key=3 > $cf-new \
+	&& return 0
+
+    # else if error:
+    rm -f $cf-new
+    return 1
 }
 
 ###################################################################
