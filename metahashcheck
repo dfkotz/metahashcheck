@@ -375,8 +375,10 @@ fi
 if [ "$problems" ]; then
     echo "Warning: errors or changes found in these directories:"
     echo "$problems" | tr \; \\n
-    echo "IFF those changes were acceptable, run the following:"
-    echo "$progname --accept $need2accept"
+    if [ "$need2accept" ]; then
+        echo "IFF those changes were acceptable, run the following:"
+        echo "$progname --accept $need2accept"
+    fi
     exit 3
 else
     echo "NO PROBLEMS FOUND."
