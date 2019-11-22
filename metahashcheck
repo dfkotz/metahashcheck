@@ -131,12 +131,13 @@ function cfxargs {
 # A function to create a new checkfile from existing files;
 # creates $cf-new and returns 0 on success, non-zero on error.
 function cfcreate {
-    find . -type f -not -name .\* -print0 | cfxargs | sort --key=3 > $cf-new \
-	&& return 0
-
-    # else if error:
-    rm -f $cf-new
-    return 1
+    if find . -type f -not -name .\* -print0 | cfxargs | sort --key=3 > $cf-new
+    then
+        return 0
+    else 
+        rm -f $cf-new
+        return 1
+    fi
 }
 
 ###################################################################
