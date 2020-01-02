@@ -22,7 +22,7 @@ On first run over a directory, the script records information about each file fo
 On future runs,
 
  * the `metacheck` script compares current metadata against the contents of `.metacheck`.
- * the `hashcheck` script compares current hash against the contents of `.metacheck`.
+ * the `hashcheck` script compares current hash against the contents of `.hashcheck`.
 
 Any discrepancies will be noted in the script output.
 
