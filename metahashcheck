@@ -59,6 +59,7 @@ cat <<EOF
    verify: verify files against prior records, and report differences.
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
+   verifyaccept: verify and auto-accept if there are only additions
 EOF
 }
 
@@ -68,6 +69,9 @@ case "$1" in
     "--accept") mode=accept;;  # to accept results of --verify
     "--verify") mode=verify;;  # to scan a directory and report changes
     "--review") mode=review;;  # to review whether --verify is needed
+    "--verifyaccept")          # to verify and auto-accept additions
+        mode=verify;
+        autoaccept=true;;
     *)  usage; exit 1;;
 esac
 shift
@@ -384,9 +388,15 @@ if [ "$problems" ]; then
 else
     echo "NO PROBLEMS FOUND."
     if [ "$need2accept" ]; then
-	echo "BUT, some photos were added in some directories."
-	echo "Thus, the following command is recommended:"
-	echo $progname --accept $need2accept
+        if [ "$autoaccept" ]; then
+            echo AUTOACCEPT: automatically accept the changes...
+            # execute ourselves recursively and exit.
+	    exec $progname --accept $need2accept
+        else
+	    echo "BUT, some photos were added in some directories."
+	    echo "Thus, the following command is recommended:"
+	    echo $progname --accept $need2accept
+        fi
 
 	if [ $progname == hashcheck ]; then
 	    echo "The following command is also recommended:"
