@@ -2,7 +2,7 @@
 
 A pair of scripts to monitor a tree of immutable files to alert the owner to possible data loss or data corruption.
 
--- David Kotz, 2019
+-- David Kotz, 2019-20
 
 ## motivation
 
@@ -42,7 +42,8 @@ ln -s metahashcheck $BIN/metacheck
  usage:
    metacheck --mode dir...
  where 'mode' is one of
-   create: create new records from scratch; delete any prior records.
+   create: create new records from scratch; error if prior records exist.
+   expand: add new records for any newly-added files.
    verify: verify files against prior records, and report differences.
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
@@ -63,16 +64,22 @@ In future runs, you (or cron) would
 metacheck --verify A B C
 ```	
 
-if the output indicates all is well, perhaps with the addition of some new files, then
+if the output indicates there are some changes/deletions/additions in (say) directory A, and you know they are all valid, then
 
 ```bash
-metacheck --accept A B C
+metacheck --accept A
 ```	
 
-If you only care to learn whether there are new files,
+But the above sequence is not always needed; if you just added some files to (say) directories B and C, you can quickly record them with
 
 ```bash
-metacheck --review A B C
+metacheck --expand B C
+```	
+
+If you only want a quick check to learn whether a 'verify' may be needed in (say) directories A and C,
+
+```bash
+metacheck --review A C
 ```	
 
 ## hashcheck usage
@@ -81,7 +88,8 @@ metacheck --review A B C
  usage:
    hashcheck --mode dir...
  where 'mode' is one of
-   create: create new records from scratch; delete any prior records.
+   create: create new records from scratch; error if prior records exist.
+   expand: add new records for any newly-added files.
    verify: verify files against prior records, and report differences.
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
@@ -93,14 +101,14 @@ Hashcheck is much slower - because it hashes every file - but should still be ru
 
 ## adding new files
 
-When new files are added to a directory `X`, it is necessary to run this full sequence:
+When new files are added, it is best to run both `metacheck` and `hashcheck`. For example, if there are new files in directories `X` and `Y`:
 
 ```
-metacheck --verify X
-metacheck --accept X  # assuming all went well with the prior command
-hashcheck --verify X
-hashcheck --accept X  # assuming all went well with the prior command
+metacheck --expand X Y
+hashcheck --expand X Y
 ```
+
+This mode runs fast and does not verify or recompute metadata or hashes for the pre-existing files.
 
 ## directories
 
@@ -117,7 +125,7 @@ hashcheck --verify Photos/19* Photos/20*
 
 Either one will scan all the photos.  The former creates one big file `Photos/.hashcheck` and the latter creates dozens of smaller files `Photos/*/.hashcheck`.  Thus, one needs to choose, and stick with the choice.
 
-The latter gives me more flexibility: if a problem occurs, I can re-run `hashcheck` on the relevant directory.  Or, if I know I've made recent additions in just the `2019` directory, I might just run
+The latter gives me more flexibility: if a problem occurs, I can re-run `hashcheck` on the relevant directory.  Or, if I know I've made recent updates in just the `2019` directory, I might just run
 
 ```
 hashcheck --verify Photos/2019
@@ -125,7 +133,7 @@ hashcheck --verify Photos/2019
 
 ## automation
 
-Here is a piece of a script I run every day.  It sends me email only if `metacheck` exits non-zero, i.e., found some trouble.  This could be adapted for use with cron.
+Here is a piece of a script I run every day.  It automatically (and silently) adds new photos, but verifies the metadata for all photos.  (It does not verify the hash of all photos, which would take hours.) It sends me email if `metacheck` or `hashcheck` exit non-zero, i.e., found some trouble.  This could be adapted for use with cron.
 
 ```
 # check each photo collection for integrity
@@ -137,8 +145,12 @@ do
     do
         dir=${meta%/.metacheck}
         log="$dir/.log"
+        metacheck --expand "$dir" > "$log" \
+            || mail -s "metacheck-expand: $dir" $USER < "$log"
+        hashcheck --expand "$dir" > "$log" \
+            || mail -s "hashcheck-expand: $dir" $USER < "$log"
         metacheck --verify "$dir" > "$log" \
-            || mail -s "metacheck: $dir" $USER < "$log"
+            || mail -s "metacheck-verify: $dir" $USER < "$log"
     done
 done
 ```
