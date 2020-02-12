@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # (bash v4 required)
 #
-# metacheck & hashcheck - David Kotz 2019
+# metacheck & hashcheck - David Kotz 2019, 2020
 # AVAILABILITY: https://github.com/dfkotz/metahashcheck
 # LICENSE: see LICENSE.md
 # USAGE: see README.md, and function usage() below. 
@@ -17,6 +17,8 @@
 #
 # When run with --create, we create .metacheck or .hashcheck 
 #   to match the current reality.
+# When run with --expand, we update .metacheck or .hashcheck 
+#   by adding any newly added files; no changes made for existing files.
 # When run with --verify, we create .metacheck-new or .hashcheck-new 
 #   according to current reality, and compare them with existing checkfiles;
 #   any new, changed, or missing files are noted.
@@ -57,6 +59,7 @@ cat <<EOF
    $progname --mode dir...
  where 'mode' is one of
    create: create new records from scratch; error if prior records exist.
+   expand: add new records for any newly-added files.
    verify: verify files against prior records, and report differences.
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
@@ -66,8 +69,9 @@ EOF
 # in what mode shall we operate?
 case "$1" in
     "--create") mode=create;;  # for the first time on a new directory
-    "--accept") mode=accept;;  # to accept results of --verify
+    "--expand") mode=expand;;  # to add entries for newly added files
     "--verify") mode=verify;;  # to scan a directory and report changes
+    "--accept") mode=accept;;  # to accept results of --verify
     "--review") mode=review;;  # to review whether --verify is needed
     *)  usage; exit 1;;
 esac
@@ -96,7 +100,7 @@ function cleanall {
 }
 function cleantmp {
     echo cleaning up temp files...
-    rm -f $cf.* $tmp
+    rm -f $cf.* $tmp $tmp.*
 }
 function cleanall-and-exit {
     cleanall
@@ -143,11 +147,33 @@ function cfxargs {
 
 
 ###################################################################
+# A function to list all the relevant new files in current directory;
+# arguments to cflist are passed to end of 'find' command; caller should
+# add argument -print or -print0 depending on desired output format.
+function cflist {
+    find . \( -type f -and -not -name .\* -and -not -name Icon\? \) "$@"
+    return $?
+}
+
+###################################################################
 # A function to create a new checkfile from existing files;
 # creates $cf-new and returns 0 on success, non-zero on error.
 function cfcreate {
-    if find . -type f -not -name .\* -and -not -name Icon\? -print0 \
-        | cfxargs | sort --key=3 > $cf-new
+    if cflist -print0 | cfxargs | sort --key=3 > $cf-new
+    then
+        return 0
+    else 
+        rm -f $cf-new
+        return 1
+    fi
+}
+
+###################################################################
+# A function to extend a checkfile with additional files whose names
+# are listed, one per line, in the standard input;
+# creates $cf-new and returns 0 on success, non-zero on error.
+function cfextend {
+    if tr \\n \\000 | cfxargs | cat $cf - | sort --key=3 > $cf-new
     then
         return 0
     else 
@@ -258,6 +284,56 @@ function mode-create {
 }
 
 ###################################################################
+# Execute mode 'expand' in current working directory.
+# This extends the current $cf file with new records for any new files.
+# It does not verify or re-compute records for existing files.
+function mode-expand {
+    # only relevant if there is a prior checkfile
+    if [[ ! -f $cf ]]; then
+        echo "error: $cf missing for $dir"
+        echo "to create, $0 --create $dir"
+        echo "skipping $dir..."
+        problems+=" $dir: missing $cf;"
+        return 1
+    fi
+
+    echo expanding $dir by looking for files not listed in $cf...
+
+    # first, make a list of filenames in the directory
+    if ! ( cflist -print | sort > $tmp.new ); then
+        echo "trouble listing files... giving up on $dir"
+        problems+=" $dir: trouble;"
+        return 1
+    fi
+
+    # next, make a list of filenames in $cf, by stripping off first two numbers
+    sed 's/^[0-9]* [0-9]* //' $cf | sort > $tmp.old
+
+    # now compare the two lists, to find filenames that are not in $cf
+    comm -13 $tmp.old $tmp.new > $tmp.add
+    # count the number of additional files
+    added=$(cat $tmp.add | wc -l)
+    if [ $added -gt 0 ]; then
+        # some files to be added
+        if cfextend < $tmp.add; then
+            echo ADDED $added files.
+            # save the new file
+            mv -f $cf-new $cf
+            additions+=" $dir: $added files added;"
+            return 0
+        else
+            echo FAILED in adding $added files...
+            problems+=" $dir: cfextend failed;"
+            return 1
+        fi
+    else
+        # no files exist that are not already listed in $cf
+        echo "no new files to be added."
+        return 0     
+    fi
+}
+
+###################################################################
 # Execute mode 'verify' in current working directory.
 # This time-consuming pass computes new records for all the files
 # in the directory tree, and compares them against the pre-existing
@@ -327,12 +403,12 @@ function mode-review {
     fi
 
     echo reviewing $dir for files newer than $cf...
-    if ! ( find * -newer $cf > $tmp); then
+    if ! newer=$(cflist -newer $cf -print | wc -l); then
         echo "trouble listing files... giving up on $dir"
         problems+=" $dir: trouble;"
         return 1
     fi
-    if [ -s $tmp ]; then
+    if [ $newer -gt 0 ]; then
         return 1     # some files or directories newer than $cf
     else
         return 0     # no files or directories newer than $cf
@@ -355,6 +431,7 @@ for dir; do
     
     case $mode in
         create) mode-create;;
+        expand) mode-expand;;
         verify) mode-verify;;
         accept) mode-accept;;
         review) mode-review || review="$review $dir";;
@@ -368,9 +445,9 @@ done
 
 if [ $mode == review ]; then
     if [ "$review" == "" ]; then
-        echo No directories appear to need verification.
+        echo "No directories appear to need verification."
     else
-        echo SEVERAL DIRECTORIES NEED VERIFICATION. Consider running:
+        echo "NEED VERIFICATION; run the following":
         echo "$progname --verify $review"
     fi
 fi
