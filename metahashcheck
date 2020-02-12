@@ -168,8 +168,8 @@ function cfcompare {
     
     # quickly compare new records with existing records
     if cmp --quiet $cf $cf-new ; then
-	echo NO ADDITIONS, DELETIONS, OR CHANGES.
-	return 0
+        echo NO ADDITIONS, DELETIONS, OR CHANGES.
+        return 0
     fi
 
     # something changed, so we need to look more closely.
@@ -197,37 +197,37 @@ function cfcompare {
     # loop over all the old files to see what disappeared or changed
     for name in "${!OldCol1[@]}"
     do
-	if [[ ! -v NewCol1["$name"] ]] ; then
-	    echo "LOST $name"
-	    let lost++
-	elif [[ ${OldCol1["$name"]} -ne ${NewCol1["$name"]} ]] ; then
-	    echo "CHANGED $name"
-	    let changed++
-	elif [[ ${OldCol2["$name"]} -ne ${NewCol2["$name"]} ]] ; then
-	    echo "CHANGED $name"
-	    let changed++
-	fi
+        if [[ ! -v NewCol1["$name"] ]] ; then
+            echo "LOST $name"
+            let lost++
+        elif [[ ${OldCol1["$name"]} -ne ${NewCol1["$name"]} ]] ; then
+            echo "CHANGED $name"
+            let changed++
+        elif [[ ${OldCol2["$name"]} -ne ${NewCol2["$name"]} ]] ; then
+            echo "CHANGED $name"
+            let changed++
+        fi
     done
     
     # loop over all the new files to see what was added
     # additions are not necessarily a problem, so don't print the names
     for name in "${!NewCol1[@]}"
     do
-	if [[ ! -v OldCol1["$name"] ]] ; then
-	    # echo "ADDED $name"
-	    let added++
-	fi
+        if [[ ! -v OldCol1["$name"] ]] ; then
+            # echo "ADDED $name"
+            let added++
+        fi
     done
 
     if [[ $added -gt 0 ]]; then
-	echo "ADDED $added files"
+        echo "ADDED $added files"
         additions+=" $dir: $added files added;"
     fi
     if [[ $changed -gt 0 ]]; then
-	problems+=" $dir: $changed files changed;"
+        problems+=" $dir: $changed files changed;"
     fi
     if [[ $lost -gt 0 ]]; then
-	problems+=" $dir: $lost files lost;"
+        problems+=" $dir: $lost files lost;"
     fi
     
     # return the number of changed or lost files (ideally zero)
@@ -240,20 +240,20 @@ function cfcompare {
 # of all files in the directory tree, and create $cf file.
 function mode-create {
     if [[ -f $cf ]]; then
-	# don't overrwrite an existing checkfile
-	echo "error: $cf already exists for $dir"
-	echo "skipping $dir..."
-	problems+=" $dir: $hc already exists;"
-	return 1
+        # don't overrwrite an existing checkfile
+        echo "error: $cf already exists for $dir"
+        echo "skipping $dir..."
+        problems+=" $dir: $hc already exists;"
+        return 1
     fi
     
     if cfcreate; then
-	# save the new file
-	mv -f $cf-new $cf
-	return 0
+        # save the new file
+        mv -f $cf-new $cf
+        return 0
     else
-	problems+=" $dir: cfcreate failed;"
-	return 1
+        problems+=" $dir: cfcreate failed;"
+        return 1
     fi
 }
 
@@ -267,11 +267,11 @@ function mode-create {
 function mode-verify {
     # can't verify if there is not a prior checkfile
     if [[ ! -f $cf ]]; then
-	echo "error: $cf missing for $dir"
-	echo "to create, $0 --create $dir"
-	echo "skipping $dir..."
-	problems+=" $dir: missing $cf;"
-	return 1
+        echo "error: $cf missing for $dir"
+        echo "to create, $0 --create $dir"
+        echo "skipping $dir..."
+        problems+=" $dir: missing $cf;"
+        return 1
     fi
     
     cfcreate && cfcompare && return 0
@@ -287,21 +287,21 @@ function mode-verify {
 function mode-accept {
     # can't accept if there is not a prior checkfile
     if [[ ! -f $cf ]]; then
-	echo "error: $cf missing for $dir"
-	echo "to create, $0 --create $dir"
-	echo "skipping $dir..."
-	problems+=" $dir: missing $cf;"
-	return 1
+        echo "error: $cf missing for $dir"
+        echo "to create, $0 --create $dir"
+        echo "skipping $dir..."
+        problems+=" $dir: missing $cf;"
+        return 1
     fi
     
     # can't accept if there is not a new checkfile
     if [[ ! -f $cf-new ]]; then
-	echo "error: $cf-new missing for $dir"
-	echo "perhaps because you did not run 'verify' first."
-	echo "to create, $0 --verify $dir"
-	echo "skipping $dir..."
-	problems+=" $dir: missing $cf-new;"
-	return 1
+        echo "error: $cf-new missing for $dir"
+        echo "perhaps because you did not run 'verify' first."
+        echo "to create, $0 --verify $dir"
+        echo "skipping $dir..."
+        problems+=" $dir: missing $cf-new;"
+        return 1
     fi
     
     echo updating $cf...
@@ -319,23 +319,23 @@ function mode-accept {
 function mode-review {
     # can't review if there is not a prior checkfile
     if [[ ! -f $cf ]]; then
-	echo "error: $cf missing for $dir"
-	echo "to create, $0 --create $dir"
-	echo "skipping $dir..."
-	problems+=" $dir: missing $cf;"
-	return 1
+        echo "error: $cf missing for $dir"
+        echo "to create, $0 --create $dir"
+        echo "skipping $dir..."
+        problems+=" $dir: missing $cf;"
+        return 1
     fi
 
     echo reviewing $dir for files newer than $cf...
     if ! ( find * -newer $cf > $tmp); then
-	echo "trouble listing files... giving up on $dir"
-	problems+=" $dir: trouble;"
-	return 1
+        echo "trouble listing files... giving up on $dir"
+        problems+=" $dir: trouble;"
+        return 1
     fi
     if [ -s $tmp ]; then
-	return 1     # some files or directories newer than $cf
+        return 1     # some files or directories newer than $cf
     else
-	return 0     # no files or directories newer than $cf
+        return 0     # no files or directories newer than $cf
     fi
 }
 
@@ -354,11 +354,11 @@ for dir; do
     fi
     
     case $mode in
-	create) mode-create;;
-	verify) mode-verify;;
-	accept) mode-accept;;
-	review) mode-review || review="$review $dir";;
-	*) ;;
+        create) mode-create;;
+        verify) mode-verify;;
+        accept) mode-accept;;
+        review) mode-review || review="$review $dir";;
+        *) ;;
     esac
     
     echo -n "done... popping back to "
@@ -368,10 +368,10 @@ done
 
 if [ $mode == review ]; then
     if [ "$review" == "" ]; then
-	echo No directories appear to need verification.
+        echo No directories appear to need verification.
     else
-	echo SEVERAL DIRECTORIES NEED VERIFICATION. Consider running:
-	echo "$progname --verify $review"
+        echo SEVERAL DIRECTORIES NEED VERIFICATION. Consider running:
+        echo "$progname --verify $review"
     fi
 fi
 
@@ -387,23 +387,23 @@ if [ "$problems" ]; then
 else
     echo "NO PROBLEMS FOUND."
     if [ "$need2accept" ]; then
-	echo "BUT, some photos were added in some directories."
+        echo "BUT, some photos were added in some directories."
         echo "$additions" | tr \; \\n
-	echo "Thus, the following command is recommended:"
-	echo $progname --accept $need2accept
+        echo "Thus, the following command is recommended:"
+        echo $progname --accept $need2accept
 
-	echo
+        echo
         echo "The following command is also recommended:"
-	if [ $progname == hashcheck ]; then
-	    echo metacheck --verify $need2accept
-	else
-	    echo hashcheck --verify $need2accept
-	fi
-	# technically not a failure, but exit non-zero to get your attention
-	exit 4
+        if [ $progname == hashcheck ]; then
+            echo metacheck --verify $need2accept
+        else
+            echo hashcheck --verify $need2accept
+        fi
+        # technically not a failure, but exit non-zero to get your attention
+        exit 4
     else
-	# no problems, and no new files needing acceptance
-	exit 0
+        # no problems, and no new files needing acceptance
+        exit 0
     fi
     # unreached; the preceding if statement should always exit
     echo ERROR: reached unreachable point; exit 98
