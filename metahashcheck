@@ -30,6 +30,7 @@
 #
 
 problems=""     # updated if errors, deletions, or changes discovered.
+additions=""    # updated if additions discovered.
 review=""       # updated during --review with directories needing verify.
 need2accept=""  # updated in cfcompare, with list of dirs that changed.
 
@@ -221,10 +222,11 @@ function cfcompare {
 	    let added++
 	fi
     done
+
     if [[ $added -gt 0 ]]; then
 	echo "ADDED $added files"
+        additions+="$dir: $added files added;"
     fi
-    
     if [[ $changed -gt 0 ]]; then
 	problems+=" $dir: $changed files changed;"
     fi
@@ -380,6 +382,7 @@ fi
 if [ "$problems" ]; then
     echo "Warning: errors or changes found in these directories:"
     echo "$problems" | tr \; \\n
+    echo "$additions" | tr \; \\n
     if [ "$need2accept" ]; then
         echo "IFF those changes were acceptable, run the following:"
         echo "$progname --accept $need2accept"
@@ -389,23 +392,23 @@ else
     echo "NO PROBLEMS FOUND."
     if [ "$need2accept" ]; then
         if [ "$autoaccept" ]; then
-            echo AUTOACCEPT: automatically accept the changes...
-            # execute ourselves recursively and exit.
-	    exec $progname --accept $need2accept
+            echo AUTOACCEPT: automatically accept these changes...
+            echo "$additions" | tr \; \\n
+            # execute ourselves recursively
+	    $0 --accept $need2accept
         else
 	    echo "BUT, some photos were added in some directories."
+            echo "$additions" | tr \; \\n
 	    echo "Thus, the following command is recommended:"
 	    echo $progname --accept $need2accept
         fi
 
+        echo
+	echo "The following command is also recommended:"
 	if [ $progname == hashcheck ]; then
-	    echo "The following command is also recommended:"
-	    echo metacheck --verify $need2accept
-	    echo metacheck --accept $need2accept
+	    echo metacheck --$mode $need2accept
 	else
-	    echo "The following command is also recommended:"
-	    echo hashcheck --verify $need2accept
-	    echo hashcheck --accept $need2accept
+	    echo hashcheck --$mode $need2accept
 	fi
 	# technically not a failure, but exit non-zero to get your attention
 	exit 4
@@ -413,4 +416,6 @@ else
 	# no problems, and no new files needing acceptance
 	exit 0
     fi
+    # unreached; the preceding if statement always exits
 fi
+# unreached; the preceding if statement always exits
