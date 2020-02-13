@@ -49,6 +49,10 @@ ln -s metahashcheck $BIN/metacheck
    review: quickly review dir for presence of files newer than records.
 ```
 
+In `create` mode, `metacheck` creates a new file `.metacheck` in each of the directories listed on the commandline.
+
+The other modes behave slightly differently: `metacheck` scans the listed directories, recursively, looking for any `.metacheck` files in any subdirectory of any listed directory... then processes each subdirectory that contains a `.metacheck` file.  This can be very convenient; see [directories](#directories) below.
+
 Suppose you have three directories named `A`, `B`, `C`.
 Then the first run would be
 
@@ -115,12 +119,13 @@ This mode runs fast and does not verify or recompute metadata or hashes for the 
 If you have a large collection of files organized in a directory tree, it is worth considering whether to run the scripts over the top-level tree or over its subdirectories.  For example, I have a directory of photographs called `Photos`, with one subdirectory for each year: `1982`, `1983`... `2019`.  I do not run
 
 ```
-hashcheck --verify Photos
+hashcheck --create Photos
 ```
 
-but rather 
+but rather
+
 ```
-hashcheck --verify Photos/19* Photos/20*
+hashcheck --create Photos/19* Photos/20*
 ```
 
 Either one will scan all the photos.  The former creates one big file `Photos/.hashcheck` and the latter creates dozens of smaller files `Photos/*/.hashcheck`.  Thus, one needs to choose, and stick with the choice.
@@ -131,26 +136,37 @@ The latter gives me more flexibility: if a problem occurs, I can re-run `hashche
 hashcheck --verify Photos/2019
 ```
 
+Because of the 'recursive' nature of `hashcheck` (and `metacheck`), note that I can also verify all subdirectories with just
+
+```
+hashcheck --verify Photos
+```
+
+This approach will find all the files `Photos/*/.hashcheck` and then verify each of those directories.  In some scripts, this can be a lot easier than constructing a commandline with all the directories to process.
+
+## filenames
+
+`metahashcheck` is designed to work properly if directory names, or file names, include spaces or tabs.  I've done some testing - but not completely.
+
+
 ## automation
 
 Here is a piece of a script I run every day.  It automatically (and silently) adds new photos, but verifies the metadata for all photos.  (It does not verify the hash of all photos, which would take hours.) It sends me email if `metacheck` or `hashcheck` exit non-zero, i.e., found some trouble.  This could be adapted for use with cron.
 
 ```
-# check each photo collection for integrity
-for collection in ~/Personal/Photos/Lightroom ~/Dropbox/Lightroom
-do
-    echo "metacheck in $collection..."
-    # check each photo directory in that collection
-    for meta in $(echo "$collection"/*/.metacheck)
-    do
-        dir=${meta%/.metacheck}
-        log="$dir/.log"
-        metacheck --expand "$dir" > "$log" \
-            || mail -s "metacheck-expand: $dir" $USER < "$log"
-        hashcheck --expand "$dir" > "$log" \
-            || mail -s "hashcheck-expand: $dir" $USER < "$log"
-        metacheck --verify "$dir" > "$log" \
-            || mail -s "metacheck-verify: $dir" $USER < "$log"
-    done
-done
+dirs=( ~/Personal/Photos/Lightroom ~/Dropbox/Lightroom )
+
+# check photo collections for new files
+metacheck --expand "${dirs[@]}"  > "$log" \
+    || mail -s "metacheck-expand" $USER < "$log"
+hashcheck --expand "${dirs[@]}" > "$log" \
+    || mail -s "hashcheck-expand" $USER < "$log"
+# check photo collections for integrity
+metacheck --verify "${dirs[@]}" > "$log" \
+    || mail -s "metacheck-verify" $USER < "$log"
+
 ```
+
+## known bugs
+
+If one of the arguments on the command line is not a directory, or is not searchable, `find` will print an error message to the output, but the script will proceed and ultimately report `NO PROBLEMS FOUND`.  It would be easy to overlook the message from `find`, especially if other command-line arguments are valid directories and are properly processed.

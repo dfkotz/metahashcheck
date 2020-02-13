@@ -33,7 +33,7 @@
 
 problems=""     # updated if errors, deletions, or changes discovered.
 additions=""    # updated if additions discovered.
-review=""       # updated during --review with directories needing verify.
+need2review=""  # updated during --review with directories needing verify.
 need2accept=""  # updated in cfcompare, with list of dirs that changed.
 
 # Functionality depends on the name of this script:
@@ -87,8 +87,6 @@ fi
 if [[ $# -lt 1 ]]; then 
     usage; exit 3;
 fi
-
-echo $mode records in $# directories...
 
 
 ###################################################################
@@ -201,7 +199,7 @@ function cfcompare {
     # something changed, so we need to look more closely.
     echo SOMETHING CHANGED! 
     # we will later recommend accepting the new $cf for this directory.
-    need2accept="$need2accept $dir"
+    need2accept="$need2accept '$dir'"
 
     declare -i added=0 lost=0 changed=0
     
@@ -267,8 +265,8 @@ function cfcompare {
 function mode-create {
     if [[ -f $cf ]]; then
         # don't overrwrite an existing checkfile
-        echo "error: $cf already exists for $dir"
-        echo "skipping $dir..."
+        echo "error: $cf already exists for '$dir'"
+        echo "skipping '$dir'..."
         problems+=" $dir: $hc already exists;"
         return 1
     fi
@@ -276,6 +274,7 @@ function mode-create {
     if cfcreate; then
         # save the new file
         mv -f $cf-new $cf
+        echo "created $cf for directory '$dir'"
         return 0
     else
         problems+=" $dir: cfcreate failed;"
@@ -287,21 +286,13 @@ function mode-create {
 # Execute mode 'expand' in current working directory.
 # This extends the current $cf file with new records for any new files.
 # It does not verify or re-compute records for existing files.
+# Assumes caller has verified ./$cf exists.
 function mode-expand {
-    # only relevant if there is a prior checkfile
-    if [[ ! -f $cf ]]; then
-        echo "error: $cf missing for $dir"
-        echo "to create, $0 --create $dir"
-        echo "skipping $dir..."
-        problems+=" $dir: missing $cf;"
-        return 1
-    fi
-
-    echo expanding $dir by looking for files not listed in $cf...
+    echo "expanding '$dir' by looking for new files"
 
     # first, make a list of filenames in the directory
     if ! ( cflist -print | sort > $tmp.new ); then
-        echo "trouble listing files... giving up on $dir"
+        echo "trouble listing files... giving up on '$dir'"
         problems+=" $dir: trouble;"
         return 1
     fi
@@ -340,16 +331,8 @@ function mode-expand {
 # records in $cf.  It leaves behind $cf-new;
 # later, if the user decides to accept the changes, the user should
 # run again with --accept.
+# Assumes caller has verified ./$cf exists.
 function mode-verify {
-    # can't verify if there is not a prior checkfile
-    if [[ ! -f $cf ]]; then
-        echo "error: $cf missing for $dir"
-        echo "to create, $0 --create $dir"
-        echo "skipping $dir..."
-        problems+=" $dir: missing $cf;"
-        return 1
-    fi
-    
     cfcreate && cfcompare && return 0
     problems+=" $dir: cfcreate or cfcompare failed;"
     return 1
@@ -360,22 +343,14 @@ function mode-verify {
 # Assuming a --verify pass has been run recently on this directory,
 # leaving a $cf-new file behind, this --accept pass simply
 # overwrites $cf with $cf-new.
+# Assumes caller has verified ./$cf exists.
 function mode-accept {
-    # can't accept if there is not a prior checkfile
-    if [[ ! -f $cf ]]; then
-        echo "error: $cf missing for $dir"
-        echo "to create, $0 --create $dir"
-        echo "skipping $dir..."
-        problems+=" $dir: missing $cf;"
-        return 1
-    fi
-    
     # can't accept if there is not a new checkfile
     if [[ ! -f $cf-new ]]; then
-        echo "error: $cf-new missing for $dir"
+        echo "error: $cf-new missing for '$dir'"
         echo "perhaps because you did not run 'verify' first."
-        echo "to create, $0 --verify $dir"
-        echo "skipping $dir..."
+        echo "to create, $0 --verify '$dir'"
+        echo "skipping '$dir'..."
         problems+=" $dir: missing $cf-new;"
         return 1
     fi
@@ -392,26 +367,21 @@ function mode-accept {
 # or files that are newer than the $cf file.  If so, that's 
 # a clear sign that the directory needs --verify.  The main script 
 # outputs a suggested commandline.
+# Assumes caller has verified ./$cf exists.
 function mode-review {
-    # can't review if there is not a prior checkfile
-    if [[ ! -f $cf ]]; then
-        echo "error: $cf missing for $dir"
-        echo "to create, $0 --create $dir"
-        echo "skipping $dir..."
-        problems+=" $dir: missing $cf;"
-        return 1
-    fi
-
-    echo reviewing $dir for files newer than $cf...
+    echo "reviewing '$dir' for files newer than $cf..."
     if ! newer=$(cflist -newer $cf -print | wc -l); then
-        echo "trouble listing files... giving up on $dir"
+        echo "trouble listing files... giving up on '$dir'"
         problems+=" $dir: trouble;"
         return 1
     fi
     if [ $newer -gt 0 ]; then
-        return 1     # some files or directories newer than $cf
+        # some files or directories newer than $cf
+        need2review="$need2review '$dir'"
+        return 1
     else
-        return 0     # no files or directories newer than $cf
+        # no files or directories newer than $cf
+        return 0
     fi
 }
 
@@ -419,13 +389,40 @@ function mode-review {
 ###################################################################
 ######################### main loop ###############################
 
-# loop over all parameters, processing each directory independently
-for dir; do
-    if cd "$dir"; then
-        echo "examine directory $dir"...
+# first, make an array of directories to be processed.
+if [ $mode == create ]; then
+    # process each command-line dir literally.
+    dirs=("$@")
+    echo "create $cf in each of ${#dirs[@]} directories..."
+else
+    # make an array of subdirs containing file $cf, 
+    # anywhere under each directory in the command-line arguments..
+    echo search for $cf in $# arguments...
+
+    # Here it gets tricky; we use 'find' to look for all $cf in any subdir
+    # of any argument "$@", and 'sed' to trim each pathname to subdir name;
+    # we need to temporarily modify IFS so each line of output becomes one
+    # element of the array 'dirs'; supports pathnames with embedded spaces.
+    oldIFS="$IFS"; IFS=$'\n'
+    dirs=($(find "$@" -name $cf | sed s+/$cf++))
+    IFS="$oldIFS"
+
+    # did we find anything?
+    if [ ${#dirs[@]} -eq 0 ]; then
+        problems+=" no $cf found under any argument listed;"
     else
-        echo "skipping $dir" ...
-        problems+=" $dir: error;"
+        echo "$mode $cf in each of ${#dirs[@]} directories..."
+    fi
+fi
+    
+# loop over all dirs, processing each directory independently
+for dir in "${dirs[@]}"
+do
+    if cd "$dir"; then
+        echo "examine directory '$dir'"...
+    else
+        echo "cannot cd '$dir'; ...skipping"
+        problems+=" $dir: error with 'cd';"
         continue
     fi
     
@@ -434,7 +431,7 @@ for dir; do
         expand) mode-expand;;
         verify) mode-verify;;
         accept) mode-accept;;
-        review) mode-review || review="$review $dir";;
+        review) mode-review;;
         *) ;;
     esac
     
@@ -443,12 +440,13 @@ for dir; do
     echo
 done
 
+# Check the results of the above loop.
 if [ $mode == review ]; then
-    if [ "$review" == "" ]; then
+    if [ "$need2review" == "" ]; then
         echo "No directories appear to need verification."
     else
         echo "NEED VERIFICATION; run the following":
-        echo "$progname --verify $review"
+        echo "$progname --verify $need2review"
     fi
 fi
 
