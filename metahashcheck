@@ -464,7 +464,7 @@ if [ "$problems" ]; then
 else
     echo "NO PROBLEMS FOUND."
     if [ "$need2accept" ]; then
-        echo "BUT, some photos were added in some directories."
+        echo "BUT, some files were added in some directories."
         echo "$additions" | tr \; \\n
         echo "Thus, the following command is recommended:"
         echo $progname --accept $need2accept
