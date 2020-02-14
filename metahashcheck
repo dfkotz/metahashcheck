@@ -188,8 +188,6 @@ function cfextend {
 # 3 filename
 # and returns 0 on success, non-zero if any changes detected
 function cfcompare {
-    echo compare with old records...
-    
     # quickly compare new records with existing records
     if cmp --quiet $cf $cf-new ; then
         echo NO ADDITIONS, DELETIONS, OR CHANGES.
@@ -254,8 +252,8 @@ function cfcompare {
         problems+=" $dir: $lost files lost;"
     fi
     
-    # return the number of changed or lost files (ideally zero)
-    return $(( $changed + $lost ))
+    # return the number of added, changed, or lost files (ideally zero)
+    return $(( $added + $changed + $lost ))
 }
 
 ###################################################################
@@ -328,14 +326,25 @@ function mode-expand {
 # Execute mode 'verify' in current working directory.
 # This time-consuming pass computes new records for all the files
 # in the directory tree, and compares them against the pre-existing
-# records in $cf.  It leaves behind $cf-new;
+# records in $cf.  If there are any differences, it leaves behind $cf-new;
 # later, if the user decides to accept the changes, the user should
 # run again with --accept.
 # Assumes caller has verified ./$cf exists.
 function mode-verify {
-    cfcreate && cfcompare && return 0
-    problems+=" $dir: cfcreate or cfcompare failed;"
-    return 1
+    if cfcreate; then
+        if cfcompare; then
+            # no changes, no need for later --accept, don't keep $cf-new
+            rm -f $cf-new
+            return 0
+        else
+            # some changes were noted, or failures occurred
+            problems+=" $dir: cfcompare failed or found differences;"
+            return 1
+        fi
+    else
+        problems+=" $dir: cfcreate failed;"
+        return 2
+    fi
 }
 
 ###################################################################
