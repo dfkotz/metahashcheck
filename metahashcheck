@@ -243,13 +243,13 @@ function cfcompare {
 
     if [[ $added -gt 0 ]]; then
         echo "ADDED $added files"
-        additions+=" $dir: $added files added;"
+        additions+=" '$dir': $added files added;"
     fi
     if [[ $changed -gt 0 ]]; then
-        problems+=" $dir: $changed files changed;"
+        problems+=" '$dir': $changed files changed;"
     fi
     if [[ $lost -gt 0 ]]; then
-        problems+=" $dir: $lost files lost;"
+        problems+=" '$dir': $lost files lost;"
     fi
     
     # return the number of added, changed, or lost files (ideally zero)
@@ -265,7 +265,7 @@ function mode-create {
         # don't overrwrite an existing checkfile
         echo "error: $cf already exists for '$dir'"
         echo "skipping '$dir'..."
-        problems+=" $dir: $hc already exists;"
+        problems+=" '$dir': $hc already exists;"
         return 1
     fi
     
@@ -275,7 +275,7 @@ function mode-create {
         echo "created $cf for directory '$dir'"
         return 0
     else
-        problems+=" $dir: cfcreate failed;"
+        problems+=" '$dir': cfcreate failed;"
         return 1
     fi
 }
@@ -291,7 +291,7 @@ function mode-expand {
     # first, make a list of filenames in the directory
     if ! ( cflist -print | sort > $tmp.new ); then
         echo "trouble listing files... giving up on '$dir'"
-        problems+=" $dir: trouble;"
+        problems+=" '$dir': trouble;"
         return 1
     fi
 
@@ -308,11 +308,11 @@ function mode-expand {
             echo ADDED $added files.
             # save the new file
             mv -f $cf-new $cf
-            additions+=" $dir: $added files added;"
+            additions+=" '$dir': $added files added;"
             return 0
         else
             echo FAILED in adding $added files...
-            problems+=" $dir: cfextend failed;"
+            problems+=" '$dir': cfextend failed;"
             return 1
         fi
     else
@@ -338,11 +338,11 @@ function mode-verify {
             return 0
         else
             # some changes were noted, or failures occurred
-            problems+=" $dir: cfcompare failed or found differences;"
+            problems+=" '$dir': cfcompare failed or found differences;"
             return 1
         fi
     else
-        problems+=" $dir: cfcreate failed;"
+        problems+=" '$dir': cfcreate failed;"
         return 2
     fi
 }
@@ -360,7 +360,7 @@ function mode-accept {
         echo "perhaps because you did not run 'verify' first."
         echo "to create, $0 --verify '$dir'"
         echo "skipping '$dir'..."
-        problems+=" $dir: missing $cf-new;"
+        problems+=" '$dir': missing $cf-new;"
         return 1
     fi
     
@@ -381,7 +381,7 @@ function mode-review {
     echo "reviewing '$dir' for files newer than $cf..."
     if ! newer=$(cflist -newer $cf -print | wc -l); then
         echo "trouble listing files... giving up on '$dir'"
-        problems+=" $dir: trouble;"
+        problems+=" '$dir': trouble;"
         return 1
     fi
     if [ $newer -gt 0 ]; then
@@ -431,7 +431,7 @@ do
         echo "examine directory '$dir'"...
     else
         echo "cannot cd '$dir'; ...skipping"
-        problems+=" $dir: error with 'cd';"
+        problems+=" '$dir': error with 'cd';"
         continue
     fi
     
