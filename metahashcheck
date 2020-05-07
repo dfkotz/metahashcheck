@@ -25,7 +25,10 @@
 # When run with --accept, we move .metacheck-new or .hashcheck-new to
 #   replace the current checkfiles.
 # When run with --review, we quickly look to see whether any directory has
-# some files that are newer than its current checkfiles.
+#   some files that are newer than its current checkfiles.
+# When run with --update, we act add new files (like --expand) but we also
+#   alert to missing files (like --verify), but we do not check contents
+#   of existing files.
 #
 # For use in Lightroom, one might also try the following plugin:
 #    http://bayimages.net/blog/lightroom/validator/
@@ -63,6 +66,7 @@ cat <<EOF
    verify: verify files against prior records, and report differences.
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
+   update: add new records (like expand) and alert to missing files.
 EOF
 }
 
@@ -73,6 +77,7 @@ case "$1" in
     "--verify") mode=verify;;  # to scan a directory and report changes
     "--accept") mode=accept;;  # to accept results of --verify
     "--review") mode=review;;  # to review whether --verify is needed
+    "--update") mode=update;;  # like expand, but alert to missing files
     *)  usage; exit 1;;
 esac
 shift
@@ -281,13 +286,12 @@ function mode-create {
 }
 
 ###################################################################
-# Execute mode 'expand' in current working directory.
-# This extends the current $cf file with new records for any new files.
+# Execute either mode 'expand' or 'update' in current working directory.
+# This extends the current $cf file with new records for any new files;
+# it also produces a list of misisng files, like in mode-verify.
 # It does not verify or re-compute records for existing files.
 # Assumes caller has verified ./$cf exists.
-function mode-expand {
-    echo "expanding '$dir' by looking for new files"
-
+function mode-expandupdate {
     # first, make a list of filenames in the directory
     if ! ( cflist -print | sort > $tmp.new ); then
         echo "trouble listing files... giving up on '$dir'"
@@ -309,17 +313,72 @@ function mode-expand {
             # save the new file
             mv -f $cf-new $cf
             additions+=" '$dir': $added files added;"
-            return 0
+            result=0
         else
             echo FAILED in adding $added files...
             problems+=" '$dir': cfextend failed;"
-            return 1
+            result=1
         fi
     else
         # no files exist that are not already listed in $cf
         echo "no new files to be added."
-        return 0     
+        result=0
     fi
+
+    # unless we're in update mode, we're done
+    if [ $mode != "update" ]; then
+        return $result
+    fi
+
+    # now compare the two lists, to find filenames that disappeared
+    comm -23 $tmp.old $tmp.new > $tmp.lost
+    # count the number of lost files
+    lost=$(cat $tmp.lost | wc -l)
+    if [ $lost -gt 0 ]; then
+        # we lost some files, and need to remove them from $cf;
+        # build an awk script to help us do that.
+        echo '{filename=$0; sub(/[0-9]* [0-9]* /,"", filename)}' > $tmp.awk
+        while read -r name
+        do
+            echo "LOST $name"
+            name="${name//\"/\\\"}" # protect any quotes inside name
+            echo "{if (filename == \"$name\") next}" >> $tmp.awk
+        done < $tmp.lost
+        echo '{print}' >> $tmp.awk
+
+        # create $cf-new so the user can later --accept these changes:
+        awk -f $tmp.awk < $cf > $cf-new
+
+        # we will later recommend accepting the new $cf for this directory.
+        need2accept="$need2accept '$dir'"
+        problems+=" '$dir': $lost files lost;"
+        result=1
+    fi
+
+    return $result
+}
+
+###################################################################
+# Execute mode 'expand' in current working directory.
+# This extends the current $cf file with new records for any new files.
+# It does not verify or re-compute records for existing files.
+# Assumes caller has verified ./$cf exists.
+function mode-expand {
+    echo "expanding '$dir' by looking for new files"
+    mode-expandupdate
+    return $?
+}
+
+###################################################################
+# Execute mode 'update' in current working directory.
+# This extends the current $cf file with new records for any new files;
+# it also produces a list of misisng files, like in mode-verify.
+# It does not verify or re-compute records for existing files.
+# Assumes caller has verified ./$cf exists.
+function mode-update {
+    echo "updating '$dir' by looking for new or missing files"
+    mode-expandupdate
+    return $?
 }
 
 ###################################################################
@@ -441,6 +500,7 @@ do
         verify) mode-verify;;
         accept) mode-accept;;
         review) mode-review;;
+        update) mode-update;;
         *) ;;
     esac
     
