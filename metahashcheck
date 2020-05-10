@@ -471,21 +471,24 @@ else
     # of any argument "$@", and 'sed' to trim each pathname to subdir name;
     # we need to temporarily modify IFS so each line of output becomes one
     # element of the array 'dirs'; supports pathnames with embedded spaces.
+    # The 'sort' makes it easier to see progress in long runs.
     oldIFS="$IFS"; IFS=$'\n'
-    dirs=($(find "$@" -name $cf | sed s+/$cf++))
+    dirs=($(find "$@" -name $cf | sed s+/$cf++ | sort))
     IFS="$oldIFS"
 
     # did we find anything?
-    if [ ${#dirs[@]} -eq 0 ]; then
+    ndirs=${#dirs[@]}
+    if [ $ndirs -eq 0 ]; then
         problems+=" no $cf found under any argument listed;"
     else
-        echo "$mode $cf in each of ${#dirs[@]} directories..."
+        echo "$mode $cf in each of $ndirs directories..."
     fi
 fi
     
 # loop over all dirs, processing each directory independently
 for dir in "${dirs[@]}"
 do
+    echo $ndirs directories remaining to examine
     if cd "$dir"; then
         echo "examine directory '$dir'"...
     else
@@ -506,6 +509,8 @@ do
     
     echo -n "done... popping back to "
     cd -   # pop back to where we were before cd $dir
+
+    let ndirs--
     echo
 done
 
