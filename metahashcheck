@@ -337,17 +337,18 @@ function mode-expandupdate {
     if [ $lost -gt 0 ]; then
         # we lost some files, and need to remove them from $cf;
         # build an awk script to help us do that.
-        echo '{filename=$0; sub(/[0-9]* [0-9]* /,"", filename)}' > $tmp.awk
-        while read -r name
-        do
-            echo "LOST $name"
-            name="${name//\"/\\\"}" # protect any quotes inside name
-            echo "{if (filename == \"$name\") next}" >> $tmp.awk
-        done < $tmp.lost
-        echo '{print}' >> $tmp.awk
+        echo  > $tmp.awk 'BEGIN { while (getline < LOST) { lost[$0] = 1 } }'
+        echo >> $tmp.awk '{'
+        echo >> $tmp.awk ' filename=$0; sub(/[0-9]* [0-9]* /, "", filename);'
+        echo >> $tmp.awk ' if (filename in lost)'
+        echo >> $tmp.awk '      { print "LOST", filename }'
+        echo >> $tmp.awk ' else { print  > "/dev/stderr" }'
+        echo >> $tmp.awk '}'
+        # notice how the awk script passes non-lost files to stderr,
+        # but prints warning messages to stdout (as do we in this script).
 
         # create $cf-new so the user can later --accept these changes:
-        awk -f $tmp.awk < $cf > $cf-new
+        awk -f $tmp.awk -v LOST=$tmp.lost < $cf 2> $cf-new
 
         # we will later recommend accepting the new $cf for this directory.
         need2accept="$need2accept '$dir'"
