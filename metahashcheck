@@ -462,7 +462,8 @@ function mode-review {
 if [ $mode == create ]; then
     # process each command-line dir literally.
     dirs=("$@")
-    echo "create $cf in each of ${#dirs[@]} directories..."
+    ndirs=${#dirs[@]}
+    echo "create $cf in each of $ndirs directories..."
 else
     # make an array of subdirs containing file $cf, 
     # anywhere under each directory in the command-line arguments..
