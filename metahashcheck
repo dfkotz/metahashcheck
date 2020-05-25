@@ -34,6 +34,8 @@
 #    http://bayimages.net/blog/lightroom/validator/
 #
 
+export LC_ALL=C # ensure consistent sort order with native-byte values
+
 problems=""     # updated if errors, deletions, or changes discovered.
 additions=""    # updated if additions discovered.
 need2review=""  # updated during --review with directories needing verify.
