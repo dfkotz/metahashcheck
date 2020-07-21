@@ -211,13 +211,13 @@ function cfcompare {
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
     while read col1 col2 name;
-    do OldCol1[$name]=$col1; OldCol2[$name]=$col2;
+    do OldCol1["$name"]=$col1; OldCol2["$name"]=$col2;
     done < $cf
     
     # load the new checkfile into New
     declare -A NewCol1 NewCol2
     while read col1 col2 name;
-    do NewCol1[$name]=$col1; NewCol2[$name]=$col2;
+    do NewCol1["$name"]=$col1; NewCol2["$name"]=$col2;
     done < $cf-new
     
     echo ${#OldCol1[@]} files in Old
