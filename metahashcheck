@@ -211,13 +211,13 @@ function cfcompare {
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
     while read col1 col2 name;
-    do OldCol1["$name"]=$col1; OldCol2["$name"]=$col2;
+    do OldCol1["${name@Q}"]=$col1; OldCol2["${name@Q}"]=$col2;
     done < $cf
     
     # load the new checkfile into New
     declare -A NewCol1 NewCol2
     while read col1 col2 name;
-    do NewCol1["$name"]=$col1; NewCol2["$name"]=$col2;
+    do NewCol1["${name@Q}"]=$col1; NewCol2["${name@Q}"]=$col2;
     done < $cf-new
     
     echo ${#OldCol1[@]} files in Old
@@ -226,13 +226,13 @@ function cfcompare {
     # loop over all the old files to see what disappeared or changed
     for name in "${!OldCol1[@]}"
     do
-        if [[ ! -v NewCol1["$name"] ]] ; then
+        if [[ ! -v NewCol1["${name@Q}"] ]] ; then
             echo "LOST $name"
             let lost++
-        elif [[ ${OldCol1["$name"]} -ne ${NewCol1["$name"]} ]] ; then
+        elif [[ ${OldCol1["${name@Q}"]} -ne ${NewCol1["${name@Q}"]} ]] ; then
             echo "CHANGED $name"
             let changed++
-        elif [[ ${OldCol2["$name"]} -ne ${NewCol2["$name"]} ]] ; then
+        elif [[ ${OldCol2["${name@Q}"]} -ne ${NewCol2["${name@Q}"]} ]] ; then
             echo "CHANGED $name"
             let changed++
         fi
@@ -242,7 +242,7 @@ function cfcompare {
     # additions are not necessarily a problem, so don't print the names
     for name in "${!NewCol1[@]}"
     do
-        if [[ ! -v OldCol1["$name"] ]] ; then
+        if [[ ! -v OldCol1["${name@Q}"] ]] ; then
             # echo "ADDED $name"
             let added++
         fi
