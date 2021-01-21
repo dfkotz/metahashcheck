@@ -226,13 +226,14 @@ function cfcompare {
     # loop over all the old files to see what disappeared or changed
     for name in "${!OldCol1[@]}"
     do
+#        echo considering "${name}"
         if [[ ! -v NewCol1["${name@Q}"] ]] ; then
             echo "LOST $name"
             let lost++
-        elif [[ ${OldCol1["${name@Q}"]} -ne ${NewCol1["${name@Q}"]} ]] ; then
+        elif [[ ${OldCol1["${name}"]} -ne ${NewCol1["${name}"]} ]] ; then
             echo "CHANGED $name"
             let changed++
-        elif [[ ${OldCol2["${name@Q}"]} -ne ${NewCol2["${name@Q}"]} ]] ; then
+        elif [[ ${OldCol2["${name}"]} -ne ${NewCol2["${name}"]} ]] ; then
             echo "CHANGED $name"
             let changed++
         fi
