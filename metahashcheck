@@ -84,11 +84,16 @@ case "$1" in
 esac
 shift
 
-# on what platform do we operate?
-if [ $(uname) != "Darwin" -a $(uname) != "Linux" ]; then
-    echo Platform $(uname) not supported by this command.
-    exit 2;
-fi
+# on what platform do we operate? (see cfxargs below)
+platform=$(uname)
+case $platform in
+    Darwin)  linux=no;;
+    FreeBSD) linux=no;;
+    Linux)   linux=yes;;
+    *)
+        echo Platform $platform not supported by this command.
+        exit 2;
+esac
 
 # how many directories will we scan?
 if [[ $# -lt 1 ]]; then 
@@ -129,18 +134,18 @@ trap cleanall-and-exit sigint
 # 2 size in bytes
 # 3 filename
 function cfxargs {
-    # Sadly, the 'xargs' and 'stat' commands differ between MacOS and Linux.
-    # xargs: on MacOS, empty input does not run the command; on Linux, need -r
-    # stat: format with -f on MacOS and -c on Linux, with different %specifiers
-    if [ $(uname) == Darwin ]
-    then # MacOS
+    # Sadly, the 'xargs' and 'stat' commands differ between MacOS/BSD and Linux.
+    # xargs: on MacOS/BSD, empty input does not run the command; on Linux, need -r.
+    # stat: format with -f on MacOS/BSD and -c on Linux, with different %specifiers.
+    if [ $linux == no ]
+    then # MacOS or FreeBSD
         if [ $progname == hashcheck ]
         then # hashcheck
             xargs -0 cksum
         else # metacheck
             xargs -0 stat -f "%m %z %N"
         fi
-    else # assume Linux
+    else # Linux
         if [ $progname == hashcheck ]
         then # hashcheck
             xargs -0 -r cksum
