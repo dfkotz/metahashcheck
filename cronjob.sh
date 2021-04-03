@@ -9,7 +9,7 @@ tmp=/tmp/cronjob$$
 "$@" >& $tmp
 status=$?
 
-if [[ $status -ne 0 || -s $tmp ]]; then
+if [[ $status -ne 0 ]]; then
     echo "COMMAND: $@"
     echo "EXIT-STATUS: $status"
     echo "OUTPUT:"
