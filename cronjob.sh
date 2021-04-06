@@ -6,7 +6,7 @@
 
 tmp=/tmp/cronjob$$
 
-"$@" >& $tmp
+"$@" > $tmp 2>&1
 status=$?
 
 if [[ $status -ne 0 ]]; then
