@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # cronjob - a wrapper for metahashcheck; exit quietly if all is well
 #
