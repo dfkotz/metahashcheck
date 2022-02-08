@@ -100,6 +100,37 @@ if [[ $# -lt 1 ]]; then
     usage; exit 3;
 fi
 
+# all modes (except create) expect to find $cf in each directory argument
+nerr=0
+if [ $mode == "create" ]; then
+    # each argument must be a directory
+    for arg in "$@"
+    do
+        if [ ! -d "$arg" ]; then
+            echo "ERROR: not a directory: $arg"
+            let nerr++
+        fi
+    done
+else
+    # ensure each directory argument has something to scan
+    for arg in "$@"
+    do
+        # only consider directories; ignore all others
+        if [ -d "$arg" ]; then
+            nfound=$(find "$@" -name $cf | wc -l)
+            if [ $nfound -eq 0 ]; then
+                echo "ERROR: no $cf found in directory $arg"
+                let nerr++
+            fi
+        else
+            echo "WARNING: not a directory: $arg"
+        fi
+    done
+fi
+
+if [ $nerr -gt 0 ]; then
+   exit 4
+fi
 
 ###################################################################
 # A function for cleaning up our work if interrupted
@@ -542,7 +573,7 @@ if [ "$problems" ]; then
         echo "IFF those changes were acceptable, run the following:"
         echo "$progname --accept $need2accept"
     fi
-    exit 3
+    exit 5
 else
     echo "NO PROBLEMS FOUND."
     if [ "$need2accept" ]; then
@@ -559,13 +590,13 @@ else
             echo hashcheck --verify $need2accept
         fi
         # technically not a failure, but exit non-zero to get your attention
-        exit 4
+        exit 6
     else
         # no problems, and no new files needing acceptance
         exit 0
     fi
     # unreached; the preceding if statement should always exit
-    echo ERROR: reached unreachable point; exit 98
+    echo ERROR: reached unreachable point 1; exit 98
 fi
 # unreached; the preceding if statement should always exit
-echo ERROR: reached unreachable point; exit 99
+echo ERROR: reached unreachable point 2; exit 99
