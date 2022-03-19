@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # (bash v4 required)
 #
-# metacheck & hashcheck - David Kotz 2019, 2020
+# metacheck & hashcheck - David Kotz 2019,20,21,22
 # AVAILABILITY: https://github.com/dfkotz/metahashcheck
 # LICENSE: see LICENSE.md
 # USAGE: see README.md, and function usage() below. 
@@ -33,6 +33,16 @@
 # For use in Lightroom, one might also try the following plugin:
 #    http://bayimages.net/blog/lightroom/validator/
 #
+# LIMITATIONS:
+#   When the underlying directories are managed by Dropbox, the file size
+# will (as of 2022) be zero when Dropbox drops it from local storage; this
+# can confuse metacheck. The code highlights files as "MIGRATED".  It also
+# highlights files that Dropbox restores (thus size changing from zero to
+# non-zero. The limitation is that we do not keep a record of the original
+# file size, and thus metacheck will not detect the situation where Dropbox
+# silently changes the file size. However, hashcheck will catch that case...
+# though running hashcheck over a large Dropbox folder will force all the files
+# to be retrieved from Dropbox.
 
 export LC_ALL=C # ensure consistent sort order with native-byte values
 
@@ -155,6 +165,38 @@ trap cleanall-and-exit sigint
 
 
 ###################################################################
+# Determine whether this file is under Dropbox control and its size
+# has changed from non-zero to zero (as Dropbox removes it from local
+# storage) or from zero to non-zero (as Dropbox restores it).
+# Return 0 if so, non-zero otherwise.
+# Parameters: pathname oldSize newSize
+function dropboxSizeEffect {
+    if [[ $(uname) != Darwin ]]; then
+        # not on MacOS, thus no Dropbox
+        return 1
+    fi
+
+    # extract command parameters
+    temp="${1%\'}"    # in case pathname is 'quoted', remove any trailing quote
+    name="${temp#\'}" # and remove any leading quote
+    oldSize="$2"
+    newSize="$3"
+
+    if (( $oldSize != 0 && $newSize != 0 )); then
+        # both sizes non-zero: this is not a Dropbox effect
+        return 1
+    fi
+
+    if ls -l@ "$name" | grep -q com.dropbox ; then
+        # Dropbox attributes present: this file is under Dropbox management
+        return 0
+    else
+        # Dropbox attributes not present: no excuse for change in file size
+        return 1
+    fi
+}
+
+###################################################################
 # A function to push null-terminated filenames, from stdin,
 # through 'xargs' with a commandline appropriate to our mode of operation
 # and to the platform on which we run.  This function is where
@@ -242,7 +284,7 @@ function cfcompare {
     # we will later recommend accepting the new $cf for this directory.
     need2accept="$need2accept '$dir'"
 
-    declare -i added=0 lost=0 changed=0
+    declare -i added=0 lost=0 changed=0 migrated=0
     
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
@@ -262,16 +304,30 @@ function cfcompare {
     # loop over all the old files to see what disappeared or changed
     for name in "${!OldCol1[@]}"
     do
-#        echo considering "${name}"
+        # echo considering "${name}"
+        oldvalu=${OldCol1["${name}"]} # hash if hashcheck, time if metacheck
+        newvalu=${NewCol1["${name}"]} # hash if hashcheck, time if metacheck
+        oldSize=${OldCol2["${name}"]} # file size
+        newSize=${NewCol2["${name}"]} # file size
+
         if [[ ! -v NewCol1["${name@Q}"] ]] ; then
             echo "LOST $name"
             let lost++
-        elif [[ ${OldCol1["${name}"]} -ne ${NewCol1["${name}"]} ]] ; then
+        elif [[ $oldvalu -ne $newvalu ]] ; then
             echo "CHANGED $name"
             let changed++
-        elif [[ ${OldCol2["${name}"]} -ne ${NewCol2["${name}"]} ]] ; then
-            echo "CHANGED $name"
-            let changed++
+        elif [[ $oldSize -ne $newSize ]] ; then
+            # This situation is tricky; Dropbox can change the file size
+            # to zero when it flushes a file from local storage,
+            # or change it to non-zero when it restores the file.
+            if dropboxSizeEffect "${name}" $oldSize $newSize
+            then
+                echo "MIGRATED $name"
+                let migrated++
+            else
+                echo "CHANGED $name"
+                let changed++
+            fi
         fi
     done
     
@@ -295,9 +351,12 @@ function cfcompare {
     if [[ $lost -gt 0 ]]; then
         problems+=" '$dir': $lost files lost;"
     fi
+    if [[ $migrated -gt 0 ]]; then
+        problems+=" '$dir': $migrated files migrated;"
+    fi
     
-    # return the number of added, changed, or lost files (ideally zero)
-    return $(( $added + $changed + $lost ))
+    # return number of files added, changed, lost, or migrated (ideally zero)
+    return $(( $added + $changed + $lost + $migrated ))
 }
 
 ###################################################################
