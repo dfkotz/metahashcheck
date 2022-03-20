@@ -176,9 +176,8 @@ function dropboxSizeEffect {
         return 1
     fi
 
-    # extract command parameters
-    temp="${1%\'}"    # in case pathname is 'quoted', remove any trailing quote
-    name="${temp#\'}" # and remove any leading quote
+    # extract command parameters (unquoting $1 as the pathname, in the process)
+    name=$(sed -e "s/'\\\\''/'/g" -e "s/^'//" -e "s/'$//" <<<"$1")
     oldSize="$2"
     newSize="$3"
 
