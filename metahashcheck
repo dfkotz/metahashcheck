@@ -494,8 +494,8 @@ function mode-verify {
             rm -f $cf-new
             return 0
         else
-            # some changes were noted, or failures occurred
-            problems+=" '$dir': cfcompare failed or found differences;"
+            # some changes were noted (but cfcompare adds notes to $problems)
+            # problems+=" '$dir': cfcompare found differences;"
             return 1
         fi
     else
