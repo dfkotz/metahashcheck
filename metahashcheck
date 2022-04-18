@@ -26,7 +26,7 @@
 #   replace the current checkfiles.
 # When run with --review, we quickly look to see whether any directory has
 #   some files that are newer than its current checkfiles.
-# When run with --update, we act add new files (like --expand) but we also
+# When run with --update, we add new files (like --expand) but we also
 #   alert to missing files (like --verify), but we do not check contents
 #   of existing files.
 #
