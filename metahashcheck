@@ -36,7 +36,7 @@
 # LIMITATIONS:
 #   When the underlying directories are managed by Dropbox, the file size
 # will (as of 2022) be zero when Dropbox drops it from local storage; this
-# can confuse metacheck. The code highlights files as "MIGRATED".  It also
+# can confuse metacheck. The code may highlight files as "MIGRATED".  It also
 # highlights files that Dropbox restores (thus size changing from zero to
 # non-zero. The limitation is that we do not keep a record of the original
 # file size, and thus metacheck will not detect the situation where Dropbox
@@ -321,7 +321,10 @@ function cfcompare {
             # or change it to non-zero when it restores the file.
             if dropboxSizeEffect "${name}" $oldSize $newSize
             then
-                echo "MIGRATED $name"
+                # echo "MIGRATED $name"
+                ## comment the following to avoid unnecessary updates
+                ## of the meta/hashcheck files (but it leads to other
+                ## confusing results; a more sophisticated approach is needed)
                 let migrated++
             else
                 echo "CHANGED $name"
