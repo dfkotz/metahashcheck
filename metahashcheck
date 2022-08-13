@@ -41,8 +41,21 @@
 # non-zero. The limitation is that we do not keep a record of the original
 # file size, and thus metacheck will not detect the situation where Dropbox
 # silently changes the file size. However, hashcheck will catch that case...
-# though running hashcheck over a large Dropbox folder will force all the files
-# to be retrieved from Dropbox.
+# though one must retrieve from Dropbox a folder before running hashcheck.
+#
+#   When the underlying directories are managed by Google, the filesystem
+# sometimes lies about the list of files in a directory - duplicating some
+# filenames.  All evidence shows that there is really just one copy of such
+# files, but tools like 'find' and 'ls' will report consistent duplicates.
+# In the end, I was forced to accept some 'duplicates' in my directories,
+# baking those 'duplicates' into my hashcheck and metacheck files. I cannot
+# find any consistent way to eliminate these phantom duplicates. (removing
+# them causes more to pop up! See comments tagged PHANTOM below.
+#
+#   Worse, my code to detect and count duplicates (when looping over a list
+# of files) is not detecting the duplicate.  Unsure why!  As a result, the
+# code deletes the resulting cf-new file.  I've left some debugging code to
+# enable me to recover.
 
 export LC_ALL=C # ensure consistent sort order with native-byte values
 
@@ -171,7 +184,7 @@ trap cleanall-and-exit sigint
 # Return 0 if so, non-zero otherwise.
 # Parameters: pathname oldSize newSize
 function dropboxSizeEffect {
-    if [[ $(uname) != Darwin ]]; then
+    if [[ $platform != Darwin ]]; then
         # not on MacOS, thus no Dropbox
         return 1
     fi
@@ -184,6 +197,11 @@ function dropboxSizeEffect {
     if (( $oldSize != 0 && $newSize != 0 )); then
         # both sizes non-zero: this is not a Dropbox effect
         return 1
+    fi
+
+    if (( $oldSize == 0 && $newSize != 0 )); then
+        # happens during migration out of Dropbox
+        return 0
     fi
 
     if ls -l@ "$name" | grep -q com.dropbox ; then
@@ -283,18 +301,40 @@ function cfcompare {
     # we will later recommend accepting the new $cf for this directory.
     need2accept="$need2accept '$dir'"
 
-    declare -i added=0 lost=0 changed=0 migrated=0
+#### The following may be needed when Google makes phantom duplicates
+#### PHANTOM
+    echo COPY $cf-new for safekeeping
+    cp $cf-new ~/Desktop/tmp$cf
+####
+
+    declare -i added=0 lost=0 changed=0 migrated=0 dup=0
     
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
     while read col1 col2 name;
-    do OldCol1["${name@Q}"]=$col1; OldCol2["${name@Q}"]=$col2;
+    do
+        if [[ -v OldCol1["${name@Q}"] ]] ; then
+            #### PHANTOM: Google's phantom duplicate
+            # not sure why, but this case never happens
+            echo "DUPLICATE old file $name"
+            let dup++
+        else
+            OldCol1["${name@Q}"]=$col1; OldCol2["${name@Q}"]=$col2;
+        fi
     done < $cf
     
     # load the new checkfile into New
     declare -A NewCol1 NewCol2
     while read col1 col2 name;
-    do NewCol1["${name@Q}"]=$col1; NewCol2["${name@Q}"]=$col2;
+    do
+        if [[ -v NewCol1["${name@Q}"] ]] ; then
+            #### PHANTOM: Google's phantom duplicate
+            # not sure why, but this case never happens
+            echo "DUPLICATE new file $name"
+            let dup++
+        else
+            NewCol1["${name@Q}"]=$col1; NewCol2["${name@Q}"]=$col2;
+        fi
     done < $cf-new
     
     echo ${#OldCol1[@]} files in Old
@@ -312,9 +352,6 @@ function cfcompare {
         if [[ ! -v NewCol1["${name@Q}"] ]] ; then
             echo "LOST $name"
             let lost++
-        elif [[ $oldvalu -ne $newvalu ]] ; then
-            echo "CHANGED $name"
-            let changed++
         elif [[ $oldSize -ne $newSize ]] ; then
             # This situation is tricky; Dropbox can change the file size
             # to zero when it flushes a file from local storage,
@@ -330,6 +367,12 @@ function cfcompare {
                 echo "CHANGED $name"
                 let changed++
             fi
+        elif [[ $oldvalu -ne $newvalu ]] ; then
+            # Unfortunately this comparison is skipped when the sizes differ
+            # due to the Dropbox Size Effect.  It has to be skipped because
+            # the hash is meaningless when the file appears to be empty.
+            echo "CHANGED $name"
+            let changed++
         fi
     done
     
@@ -356,9 +399,13 @@ function cfcompare {
     if [[ $migrated -gt 0 ]]; then
         problems+=" '$dir': $migrated files migrated;"
     fi
+    if [[ $dup -gt 0 ]]; then #### PHANTOM
+        problems+=" '$dir': $dup files duplicated;"
+    fi
     
-    # return number of files added, changed, lost, or migrated (ideally zero)
-    return $(( $added + $changed + $lost + $migrated ))
+    # return number of files added, changed, lost, migrated or duplicated
+    echo $added added + $changed changed + $lost lost + $migrated migrated + $dup duplicated
+    return $(( $added + $changed + $lost + $migrated + $dup ))
 }
 
 ###################################################################
@@ -638,8 +685,14 @@ if [ "$problems" ]; then
 else
     echo "NO PROBLEMS FOUND."
     if [ "$need2accept" ]; then
-        echo "BUT, some files were added in some directories."
-        echo "$additions" | tr \; \\n
+        if [ "$additions" ]; then
+            echo "BUT, some files were added in some directories."
+            echo "$additions" | tr \; \\n
+        else
+            #### PHANTOM: if need2accept and no additions and no problems
+            echo "but SOMETHING went wrong."
+            echo "study the results carefully before accepting."
+        fi
         echo "Thus, the following command is recommended:"
         echo $progname --accept $need2accept
 
