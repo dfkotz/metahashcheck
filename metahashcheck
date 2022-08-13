@@ -22,6 +22,8 @@
 # When run with --verify, we create .metacheck-new or .hashcheck-new 
 #   according to current reality, and compare them with existing checkfiles;
 #   any new, changed, or missing files are noted.
+# When run with --random, we verify only 1% of the files (spot check!);
+#   it works just like --verify but probabilistically only 1 out of 100 files.
 # When run with --accept, we move .metacheck-new or .hashcheck-new to
 #   replace the current checkfiles.
 # When run with --review, we quickly look to see whether any directory has
@@ -89,6 +91,7 @@ cat <<EOF
    create: create new records from scratch; error if prior records exist.
    expand: add new records for any newly-added files.
    verify: verify files against prior records, and report differences.
+   random: like verify, but only 1% of files are verified (spot check!)
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
    update: add new records (like expand) and alert to missing files.
@@ -100,6 +103,7 @@ case "$1" in
     "--create") mode=create;;  # for the first time on a new directory
     "--expand") mode=expand;;  # to add entries for newly added files
     "--verify") mode=verify;;  # to scan a directory and report changes
+    "--random") mode=random;;  # to spot-check a directory for changes
     "--accept") mode=accept;;  # to accept results of --verify
     "--review") mode=review;;  # to review whether --verify is needed
     "--update") mode=update;;  # like expand, but alert to missing files
@@ -555,6 +559,37 @@ function mode-verify {
 }
 
 ###################################################################
+# Execute mode 'random' in current working directory.
+# This works like mode 'verify' except we split the existing $cf file into
+# two parts: 1% to be checked, and 99% to be ignored. In this early draft,
+# we do not produce a $cf-new file.
+# Assumes caller has verified ./$cf exists.
+function mode-random {
+    # extract a random 1% subset of lines from the $cf file
+    awk 'BEGIN {srand()} { if (rand() <= 0.01) { print } }' $cf > $cf.old
+    echo SPOT CHECK $(wc -l < $cf.old) files
+
+    if [ ! -s $cf.old ]; then
+        # subset is empty: can happen when $cf has few lines
+        return 0
+    fi
+
+    # extract filenames from those $cf lines, and compute meta/hash info
+    sed 's/^[0-9]* [0-9]* //' $cf.old | tr \\n \\0 | cfxargs > $cf.new
+
+    # compare the results with the extracted $cf lines
+    if cmp --quiet $cf.old $cf.new; then
+        echo "SPOT CHECK PASSED."
+        return 0
+    else
+        echo "SPOT CHECK FAILED - some file(s) changed."
+        problems+=" '$dir': found differences;"
+        problems+=$(diff $cf.old $cf.new)
+        return 1
+    fi
+}
+
+###################################################################
 # Execute mode 'accept' in current working directory.
 # Assuming a --verify pass has been run recently on this directory,
 # leaving a $cf-new file behind, this --accept pass simply
@@ -650,6 +685,7 @@ do
         create) mode-create;;
         expand) mode-expand;;
         verify) mode-verify;;
+        random) mode-random;;
         accept) mode-accept;;
         review) mode-review;;
         update) mode-update;;
