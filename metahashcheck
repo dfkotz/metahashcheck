@@ -164,11 +164,11 @@ fi
 # TODO: it cleans up only the current directory. need do others?
 function cleanall {
     echo cleaning up all files...
-    rm -f $cf.* $cf-*
+    cleantmp
+    rm -f $cf-*
 }
 function cleantmp {
-    echo cleaning up temp files...
-    rm -f $cf.* $tmp $tmp.*
+    rm -f $tmp $tmp.* $cf.*
 }
 function cleanall-and-exit {
     cleanall
@@ -567,7 +567,6 @@ function mode-verify {
 function mode-random {
     # extract a random 1% subset of lines from the $cf file
     awk 'BEGIN {srand()} { if (rand() <= 0.01) { print } }' $cf > $cf.old
-    echo SPOT CHECK $(wc -l < $cf.old) files
 
     if [ ! -s $cf.old ]; then
         # subset is empty: can happen when $cf has few lines
@@ -579,11 +578,11 @@ function mode-random {
 
     # compare the results with the extracted $cf lines
     if cmp --quiet $cf.old $cf.new; then
-        echo "SPOT CHECK PASSED."
+        echo SPOT CHECK $(wc -l < $cf.old) files: passed.
         return 0
     else
-        echo "SPOT CHECK FAILED - some file(s) changed."
-        problems+=" '$dir': found differences;"
+c        echo SPOT CHECK $(wc -l < $cf.old) files: FAILED.
+        problems+=" '$dir': spot-check found differences;"
         problems+=$(diff $cf.old $cf.new)
         return 1
     fi
@@ -717,6 +716,7 @@ if [ "$problems" ]; then
         echo "IFF those changes were acceptable, run the following:"
         echo "$progname --accept $need2accept"
     fi
+    cleantmp
     exit 5
 else
     echo "NO PROBLEMS FOUND."
@@ -740,13 +740,15 @@ else
             echo hashcheck --verify $need2accept
         fi
         # technically not a failure, but exit non-zero to get your attention
+        cleantmp
         exit 6
     else
         # no problems, and no new files needing acceptance
+        cleantmp
         exit 0
     fi
     # unreached; the preceding if statement should always exit
-    echo ERROR: reached unreachable point 1; exit 98
+    echo ERROR: reached unreachable point 1; cleantmp; exit 98
 fi
 # unreached; the preceding if statement should always exit
-echo ERROR: reached unreachable point 2; exit 99
+echo ERROR: reached unreachable point 2; cleantmp; exit 99
