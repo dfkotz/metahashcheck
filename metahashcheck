@@ -348,8 +348,8 @@ function cfcompare {
     for name in "${!OldCol1[@]}"
     do
         # echo considering "${name}"
-        oldvalu=${OldCol1["${name}"]} # hash if hashcheck, time if metacheck
-        newvalu=${NewCol1["${name}"]} # hash if hashcheck, time if metacheck
+        oldValu=${OldCol1["${name}"]} # hash if hashcheck, time if metacheck
+        newValu=${NewCol1["${name}"]} # hash if hashcheck, time if metacheck
         oldSize=${OldCol2["${name}"]} # file size
         newSize=${NewCol2["${name}"]} # file size
 
@@ -371,7 +371,7 @@ function cfcompare {
                 echo "CHANGED $name"
                 let changed++
             fi
-        elif [[ $oldvalu -ne $newvalu ]] ; then
+        elif [[ $oldValu -ne $newValu ]] ; then
             # Unfortunately this comparison is skipped when the sizes differ
             # due to the Dropbox Size Effect.  It has to be skipped because
             # the hash is meaningless when the file appears to be empty.
