@@ -161,17 +161,9 @@ fi
 
 ###################################################################
 # A function for cleaning up our work if interrupted
-# TODO: it cleans up only the current directory. need do others?
-function cleanall {
-    echo cleaning up all files...
-    cleantmp
-    rm -f $cf-*
-}
-function cleantmp {
-    rm -f $tmp $tmp.* $cf.*
-}
 function cleanall-and-exit {
-    cleanall
+    echo cleaning up temporary files...
+    rm -f $tmp $tmp.* $cf-new
     exit 99
 }
 
@@ -447,6 +439,7 @@ function mode-expandupdate {
     if ! ( cflist -print | sort > $tmp.new ); then
         echo "trouble listing files... giving up on '$dir'"
         problems+=" '$dir': trouble;"
+        rm -f $tmp.*
         return 1
     fi
 
@@ -478,6 +471,7 @@ function mode-expandupdate {
 
     # unless we're in update mode, we're done
     if [ $mode != "update" ]; then
+        rm -f $tmp.*
         return $result
     fi
 
@@ -507,6 +501,7 @@ function mode-expandupdate {
         result=1
     fi
 
+    rm -f $tmp.*
     return $result
 }
 
@@ -566,24 +561,26 @@ function mode-verify {
 # Assumes caller has verified ./$cf exists.
 function mode-random {
     # extract a random 1% subset of lines from the $cf file
-    awk 'BEGIN {srand()} { if (rand() <= 0.01) { print } }' $cf > $cf.old
+    awk 'BEGIN {srand()} { if (rand() <= 0.01) { print } }' $cf > $tmp.old
 
-    if [ ! -s $cf.old ]; then
+    if [ ! -s $tmp.old ]; then
         # subset is empty: can happen when $cf has few lines
         return 0
     fi
 
     # extract filenames from those $cf lines, and compute meta/hash info
-    sed 's/^[0-9]* [0-9]* //' $cf.old | tr \\n \\0 | cfxargs > $cf.new
+    sed 's/^[0-9]* [0-9]* //' $tmp.old | tr \\n \\0 | cfxargs > $tmp.new
 
     # compare the results with the extracted $cf lines
-    if cmp --quiet $cf.old $cf.new; then
-        echo SPOT CHECK $(wc -l < $cf.old) files: passed.
+    if cmp --quiet $tmp.old $tmp.new; then
+        echo SPOT CHECK $(wc -l < $tmp.old) files: passed.
+        rm -f $tmp.old $tmp.new
         return 0
     else
-c        echo SPOT CHECK $(wc -l < $cf.old) files: FAILED.
+        echo SPOT CHECK $(wc -l < $tmp.old) files: FAILED.
         problems+=" '$dir': spot-check found differences;"
-        problems+=$(diff $cf.old $cf.new)
+        problems+=$(diff $tmp.old $tmp.new)
+        rm -f $tmp.old $tmp.new
         return 1
     fi
 }
@@ -716,7 +713,6 @@ if [ "$problems" ]; then
         echo "IFF those changes were acceptable, run the following:"
         echo "$progname --accept $need2accept"
     fi
-    cleantmp
     exit 5
 else
     echo "NO PROBLEMS FOUND."
@@ -740,15 +736,13 @@ else
             echo hashcheck --verify $need2accept
         fi
         # technically not a failure, but exit non-zero to get your attention
-        cleantmp
         exit 6
     else
         # no problems, and no new files needing acceptance
-        cleantmp
         exit 0
     fi
     # unreached; the preceding if statement should always exit
-    echo ERROR: reached unreachable point 1; cleantmp; exit 98
+    echo ERROR: reached unreachable point 1; exit 98
 fi
 # unreached; the preceding if statement should always exit
-echo ERROR: reached unreachable point 2; cleantmp; exit 99
+echo ERROR: reached unreachable point 2; exit 99
