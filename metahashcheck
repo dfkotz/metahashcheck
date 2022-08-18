@@ -604,28 +604,39 @@ function mode-review {
 ###################################################################
 ######################### main loop ###############################
 
-# All modes (except create) expect to find $cf in each directory argument,
-# so scan each argument to ensure there is at least one $cf in that arg.
-nerr=0
+# build 'dirs', a list of directories to process, watching for errors
+dirs=()
+problems=""
 if [ $mode == "create" ]; then
-    # each argument must be a directory
+    # for 'create' mode, each argument must be a directory
     for arg in "$@"
     do
-        if [ ! -d "$arg" ]; then
-            echo "ERROR: not a directory: $arg"
-            let nerr++
+        if [ -d "$arg" ]; then
+            dirs=("${dirs[@]}" "$arg")
+        else
+            problems+="ERROR: not a directory: $arg;"
         fi
     done
 else
-    # ensure each directory argument has something to scan
+    # for other modes, verify at least one $cf in each argument/subdirectory
     for arg in "$@"
     do
         # only consider directories; ignore all others
         if [ -d "$arg" ]; then
-            nfound=$(find "$@" -name $cf | wc -l)
-            if [ $nfound -eq 0 ]; then
-                echo "ERROR: no $cf found in directory $arg"
-                let nerr++
+            # Here it gets tricky; we use 'find' to look for all $cf in any subdir
+            # of argument "$arg", and 'sed' to trim each pathname to subdir name;
+            # we need to temporarily modify IFS so each line of output becomes one
+            # element of the array 'dirs' (to support pathnames w/ embedded whitespace).
+            # The 'sort' makes it easier to see progress in long runs.
+            oldIFS="$IFS"; IFS=$'\n'
+            found=($(find "$arg" -name $cf | sed s+/$cf++ | sort))
+            IFS="$oldIFS"
+
+            # did we find anything? if so, add them to the list
+            if [ ${#found[@]} -gt 0 ]; then
+                dirs=("${dirs[@]}" "${found[@]}")
+            else
+                problems+="ERROR: no $cf found in this directory: $arg;"
             fi
         else
             echo "WARNING: not a directory: $arg"
@@ -633,38 +644,14 @@ else
     done
 fi
 
-if [ $nerr -gt 0 ]; then
-   exit 4
+if [ "$problems" ]; then
+    echo "$problems" | tr \; \\n
+    exit 4
 fi
 
-# next, make an array of directories to be processed.
-if [ $mode == create ]; then
-    # process each command-line dir literally.
-    dirs=("$@")
-    ndirs=${#dirs[@]}
-    echo "create $cf in each of $ndirs directories..."
-else
-    # make an array of subdirs containing file $cf, 
-    # anywhere under each directory in the command-line arguments..
-    echo search for $cf in $# arguments...
-
-    # Here it gets tricky; we use 'find' to look for all $cf in any subdir
-    # of any argument "$@", and 'sed' to trim each pathname to subdir name;
-    # we need to temporarily modify IFS so each line of output becomes one
-    # element of the array 'dirs'; supports pathnames with embedded spaces.
-    # The 'sort' makes it easier to see progress in long runs.
-    oldIFS="$IFS"; IFS=$'\n'
-    dirs=($(find "$@" -name $cf | sed s+/$cf++ | sort))
-    IFS="$oldIFS"
-
-    # did we find anything?
-    ndirs=${#dirs[@]}
-    if [ $ndirs -eq 0 ]; then
-        problems+=" no $cf found under any argument listed;"
-    else
-        echo "$mode $cf in each of $ndirs directories..."
-    fi
-fi
+# prepare to loop over the directories
+ndirs=${#dirs[@]}
+echo "$mode $cf in each of $ndirs directories..."
     
 # loop over all dirs, processing each directory independently
 for dir in "${dirs[@]}"
