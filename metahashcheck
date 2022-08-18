@@ -138,8 +138,10 @@ function cleanall-and-exit {
 # this trap will only clean the current directory - not all 
 trap cleanall-and-exit sigint
 
-# next: several functions.  skip down to "main loop" below...
 
+###################################################################
+###################################################################
+# next: several functions.  skip down to "main loop" below...
 
 ###################################################################
 # Determine whether this file is under Dropbox control and its size
