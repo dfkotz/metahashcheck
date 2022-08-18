@@ -111,6 +111,11 @@ case "$1" in
 esac
 shift
 
+# verify there is at least one argument (directory) on which to operate
+if [[ $# -lt 1 ]]; then 
+    usage; exit 3;
+fi
+
 # on what platform do we operate? (see cfxargs below)
 platform=$(uname)
 case $platform in
@@ -121,43 +126,6 @@ case $platform in
         echo Platform $platform not supported by this command.
         exit 2;
 esac
-
-# how many directories will we scan?
-if [[ $# -lt 1 ]]; then 
-    usage; exit 3;
-fi
-
-# all modes (except create) expect to find $cf in each directory argument
-nerr=0
-if [ $mode == "create" ]; then
-    # each argument must be a directory
-    for arg in "$@"
-    do
-        if [ ! -d "$arg" ]; then
-            echo "ERROR: not a directory: $arg"
-            let nerr++
-        fi
-    done
-else
-    # ensure each directory argument has something to scan
-    for arg in "$@"
-    do
-        # only consider directories; ignore all others
-        if [ -d "$arg" ]; then
-            nfound=$(find "$@" -name $cf | wc -l)
-            if [ $nfound -eq 0 ]; then
-                echo "ERROR: no $cf found in directory $arg"
-                let nerr++
-            fi
-        else
-            echo "WARNING: not a directory: $arg"
-        fi
-    done
-fi
-
-if [ $nerr -gt 0 ]; then
-   exit 4
-fi
 
 ###################################################################
 # A function for cleaning up our work if interrupted
@@ -636,7 +604,40 @@ function mode-review {
 ###################################################################
 ######################### main loop ###############################
 
-# first, make an array of directories to be processed.
+# All modes (except create) expect to find $cf in each directory argument,
+# so scan each argument to ensure there is at least one $cf in that arg.
+nerr=0
+if [ $mode == "create" ]; then
+    # each argument must be a directory
+    for arg in "$@"
+    do
+        if [ ! -d "$arg" ]; then
+            echo "ERROR: not a directory: $arg"
+            let nerr++
+        fi
+    done
+else
+    # ensure each directory argument has something to scan
+    for arg in "$@"
+    do
+        # only consider directories; ignore all others
+        if [ -d "$arg" ]; then
+            nfound=$(find "$@" -name $cf | wc -l)
+            if [ $nfound -eq 0 ]; then
+                echo "ERROR: no $cf found in directory $arg"
+                let nerr++
+            fi
+        else
+            echo "WARNING: not a directory: $arg"
+        fi
+    done
+fi
+
+if [ $nerr -gt 0 ]; then
+   exit 4
+fi
+
+# next, make an array of directories to be processed.
 if [ $mode == create ]; then
     # process each command-line dir literally.
     dirs=("$@")
