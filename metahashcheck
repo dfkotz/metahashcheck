@@ -625,10 +625,11 @@ else
     do
         # only consider directories; ignore all others
         if [ -d "$arg" ]; then
-            # Here it gets tricky; we use 'find' to look for all $cf in any subdir
-            # of argument "$arg", and 'sed' to trim each pathname to subdir name;
-            # we need to temporarily modify IFS so each line of output becomes one
-            # element of the array 'dirs' (to support pathnames w/ embedded whitespace).
+            # Here it gets tricky; we use 'find' to look for all $cf in any
+            # subdir of argument "$arg", and 'sed' to trim each pathname
+            # to subdir name; we need to temporarily modify IFS so each line
+            # of output becomes one element of the array 'dirs'
+            # (to support pathnames w/ embedded whitespace).
             # The 'sort' makes it easier to see progress in long runs.
             oldIFS="$IFS"; IFS=$'\n'
             found=($(find "$arg" -name $cf | sed s+/$cf++ | sort))
