@@ -443,29 +443,52 @@ function mode-expandupdate {
         return $result
     fi
 
-    # now compare the two lists, to find filenames that disappeared
-    comm -23 $tmp.old $tmp.new > $tmp.lost
-    # count the number of lost files
-    lost=$(cat $tmp.lost | wc -l)
-    if [ $lost -gt 0 ]; then
-        # we lost some files, and need to remove them from $cf;
-        # build an awk script to help us do that.
-        echo  > $tmp.awk 'BEGIN { while (getline < LOST) { lost[$0] = 1 } }'
-        echo >> $tmp.awk '{'
-        echo >> $tmp.awk ' filename=$0; sub(/[0-9]* [0-9]* /, "", filename);'
-        echo >> $tmp.awk ' if (filename in lost)'
-        echo >> $tmp.awk '      { print "LOST", filename }'
-        echo >> $tmp.awk ' else { print  > "/dev/stderr" }'
-        echo >> $tmp.awk '}'
-        # notice how the awk script passes non-lost files to stderr,
-        # but prints warning messages to stdout (as do we in this script).
+    ## PHANTOM
+    # If there are Google duplicates in the old list, but not in the new list,
+    # one will have been 'lost'.  The code below will treat it as if the file
+    # is totally lost - when in fact it is just the phantom duplicate that is
+    # lost.  We need to remove those duplicates from $tmp.old before comparing
+    # with $tmp.new
+    uniq $tmp.old > $tmp.oldu
+    if cmp -s $tmp.old $tmp.oldu; then
+        # no differences - thus no duplicates were found.
+        # now compare the two lists, to find filenames that disappeared
+        comm -23 $tmp.old $tmp.new > $tmp.lost
+        # count the number of lost files
+        lost=$(cat $tmp.lost | wc -l)
+        if [ $lost -gt 0 ]; then
+            # we lost some files, and need to remove them from $cf;
+            # build an awk script to help us do that.
+            echo  > $tmp.awk 'BEGIN { while(getline < LOST) { lost[$0] = 1 } }'
+            echo >> $tmp.awk '{'
+            echo >> $tmp.awk ' fname=$0; sub(/[0-9]* [0-9]* /, "", fname);'
+            echo >> $tmp.awk ' if (fname in lost)'
+            echo >> $tmp.awk '      { print "LOST", fname }'
+            echo >> $tmp.awk ' else { print  > "/dev/stderr" }'
+            echo >> $tmp.awk '}'
+            # notice how the awk script passes non-lost files to stderr,
+            # but prints warning messages to stdout (as do we in this script).
 
-        # create $cf-new so the user can later --accept these changes:
-        awk -f $tmp.awk -v LOST=$tmp.lost < $cf 2> $cf-new
+            # create $cf-new so the user can later --accept these changes:
+            awk -f $tmp.awk -v LOST=$tmp.lost < $cf 2> $cf-new
+
+            # we will later recommend accepting the new $cf for this directory.
+            need2accept="$need2accept '$dir'"
+            problems+=" '$dir': $lost files lost;"
+            result=1
+        fi
+    else
+        # duplicates found - deal with those (but don't look for lost files)
+        dup=$(uniq -d $tmp.old | wc -l)
+        echo $dup DUPLICATES found:
+        uniq -d $tmp.old
+
+        # construct a new list by removing duplicates from old list
+        uniq $cf > $cf-new
 
         # we will later recommend accepting the new $cf for this directory.
         need2accept="$need2accept '$dir'"
-        problems+=" '$dir': $lost files lost;"
+        problems+=" '$dir': $dup files duplicated, CHECK CAREFULLY;"
         result=1
     fi
 
