@@ -274,14 +274,13 @@ function cfcompare {
 ####
 
     declare -i added=0 lost=0 changed=0 migrated=0 dup=0
-    
+
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
     while read col1 col2 name;
     do
         if [[ -v OldCol1["${name@Q}"] ]] ; then
             #### PHANTOM: Google's phantom duplicate
-            # not sure why, but this case never happens
             echo "DUPLICATE old file $name"
             let dup++
         else
@@ -295,7 +294,6 @@ function cfcompare {
     do
         if [[ -v NewCol1["${name@Q}"] ]] ; then
             #### PHANTOM: Google's phantom duplicate
-            # not sure why, but this case never happens
             echo "DUPLICATE new file $name"
             let dup++
         else
@@ -305,7 +303,7 @@ function cfcompare {
     
     echo ${#OldCol1[@]} files in Old
     echo ${#NewCol1[@]} files in New
-    
+
     # loop over all the old files to see what disappeared or changed
     for name in "${!OldCol1[@]}"
     do
@@ -315,7 +313,7 @@ function cfcompare {
         oldSize=${OldCol2["${name}"]} # file size
         newSize=${NewCol2["${name}"]} # file size
 
-        if [[ ! -v NewCol1["${name@Q}"] ]] ; then
+        if [[ "$newSize" == "" ]] ; then
             echo "LOST $name"
             let lost++
         elif [[ $oldSize -ne $newSize ]] ; then
@@ -346,7 +344,7 @@ function cfcompare {
     # additions are not necessarily a problem, so don't print the names
     for name in "${!NewCol1[@]}"
     do
-        if [[ ! -v OldCol1["${name@Q}"] ]] ; then
+        if [[ "oldSize" == "" ]] ; then
             # echo "ADDED $name"
             let added++
         fi
