@@ -447,11 +447,12 @@ function mode-expandupdate {
     # If there are Google duplicates in the old list, but not in the new list,
     # one will have been 'lost'.  The code below will treat it as if the file
     # is totally lost - when in fact it is just the phantom duplicate that is
-    # lost.  We need to remove those duplicates from $tmp.old before comparing
-    # with $tmp.new
+    # lost.  The first branch of this IF statement deals with LOST files, and
+    # the second branch deals with DUPLICATE files.  If there are duplicates,
+    # we won't look for lost files - a second pass would be needed.
     uniq $tmp.old > $tmp.oldu
     if cmp -s $tmp.old $tmp.oldu; then
-        # no differences - thus no duplicates were found.
+        # no differences - thus no duplicates were found. (NOT PHANTOM)
         # now compare the two lists, to find filenames that disappeared
         comm -23 $tmp.old $tmp.new > $tmp.lost
         # count the number of lost files
@@ -478,6 +479,7 @@ function mode-expandupdate {
             result=1
         fi
     else
+        ## PHANTOM
         # duplicates found - deal with those (but don't look for lost files)
         dup=$(uniq -d $tmp.old | wc -l)
         echo $dup DUPLICATES found:
