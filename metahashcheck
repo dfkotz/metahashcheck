@@ -13,23 +13,24 @@
 #
 # Below "checkfiles" and "$cf" refers to .hashcheck or .metacheck files.
 #  .metacheck.* and .hashcheck.* are temporary files used during operation.
-#  .metacheck-* and .hashcheck-* are retained after verify for use by --accept.
+#  .metacheck-* and .hashcheck-* are retained after verify for use by 'accept'.
 #
-# When run with --create, we create .metacheck or .hashcheck 
+# The first argument is the 'mode' - determining the action to be performed.
+# In mode 'create', we create .metacheck or .hashcheck
 #   to match the current reality.
-# When run with --expand, we update .metacheck or .hashcheck 
+# In mode 'expand', we update .metacheck or .hashcheck
 #   by adding any newly added files; no changes made for existing files.
-# When run with --verify, we create .metacheck-new or .hashcheck-new 
+# In mode 'verify', we create .metacheck-new or .hashcheck-new
 #   according to current reality, and compare them with existing checkfiles;
 #   any new, changed, or missing files are noted.
-# When run with --sample, we verify only 1% of the files (spot check!);
-#   it works just like --verify but probabilistically only 1 out of 100 files.
-# When run with --accept, we move .metacheck-new or .hashcheck-new to
+# In mode 'sample', we verify only 1% of the files (spot check!);
+#   it works just like 'verify' but probabilistically only 1 out of 100 files.
+# In mode 'accept', we move .metacheck-new or .hashcheck-new to
 #   replace the current checkfiles.
-# When run with --review, we quickly look to see whether any directory has
+# In mode 'review', we quickly look to see whether any directory has
 #   some files that are newer than its current checkfiles.
-# When run with --update, we add new files (like --expand) but we also
-#   alert to missing files (like --verify), but we do not check contents
+# In mode 'update', we add new files (like 'expand') but we also
+#   alert to missing files (like 'verify'), but we do not check contents
 #   of existing files.
 #
 # For use in Lightroom, one might also try the following plugin:
@@ -63,7 +64,7 @@ export LC_ALL=C # ensure consistent sort order with native-byte values
 
 problems=""     # updated if errors, deletions, or changes discovered.
 additions=""    # updated if additions discovered.
-need2review=""  # updated during --review with directories needing verify.
+need2review=""  # updated during 'review' with directories needing verify.
 need2accept=""  # updated in cfcompare, with list of dirs that changed.
 
 # Functionality depends on the name of this script:
@@ -86,7 +87,7 @@ esac
 function usage() {
 cat <<EOF
  usage:
-   $progname --mode dir...
+   $progname mode dir...
  where 'mode' is one of
    create: create new records from scratch; error if prior records exist.
    expand: add new records for any newly-added files.
@@ -100,13 +101,13 @@ EOF
 
 # in what mode shall we operate?
 case "$1" in
-    "--create") mode=create;;  # for the first time on a new directory
-    "--expand") mode=expand;;  # to add entries for newly added files
-    "--verify") mode=verify;;  # to scan a directory and report changes
-    "--sample") mode=sample;;  # to spot-check a directory for changes
-    "--accept") mode=accept;;  # to accept results of --verify
-    "--review") mode=review;;  # to review whether --verify is needed
-    "--update") mode=update;;  # like expand, but alert to missing files
+    "create") mode=create;;  # for the first time on a new directory
+    "expand") mode=expand;;  # to add entries for newly added files
+    "verify") mode=verify;;  # to scan a directory and report changes
+    "sample") mode=sample;;  # to spot-check a directory for changes
+    "accept") mode=accept;;  # to accept results of 'verify'
+    "review") mode=review;;  # to review whether 'verify' is needed
+    "update") mode=update;;  # like 'expand', but alert to missing files
     *)  usage; exit 1;;
 esac
 shift
@@ -470,7 +471,7 @@ function mode-expandupdate {
             # notice how the awk script passes non-lost files to stderr,
             # but prints warning messages to stdout (as do we in this script).
 
-            # create $cf-new so the user can later --accept these changes:
+            # create $cf-new so the user can later 'accept' these changes:
             awk -f $tmp.awk -v LOST=$tmp.lost < $cf 2> $cf-new
 
             # we will later recommend accepting the new $cf for this directory.
@@ -527,12 +528,12 @@ function mode-update {
 # in the directory tree, and compares them against the pre-existing
 # records in $cf.  If there are any differences, it leaves behind $cf-new;
 # later, if the user decides to accept the changes, the user should
-# run again with --accept.
+# run again with mode 'accept'.
 # Assumes caller has verified ./$cf exists.
 function mode-verify {
     if cfcreate; then
         if cfcompare; then
-            # no changes, no need for later --accept, don't keep $cf-new
+            # no changes, no need for later 'accept', don't keep $cf-new
             rm -f $cf-new
             return 0
         else
@@ -580,8 +581,8 @@ function mode-sample {
 
 ###################################################################
 # Execute mode 'accept' in current working directory.
-# Assuming a --verify pass has been run recently on this directory,
-# leaving a $cf-new file behind, this --accept pass simply
+# Assuming a 'verify' pass has been run recently on this directory,
+# leaving a $cf-new file behind, this 'accept' pass simply
 # overwrites $cf with $cf-new.
 # Assumes caller has verified ./$cf exists.
 function mode-accept {
@@ -589,7 +590,7 @@ function mode-accept {
     if [[ ! -f $cf-new ]]; then
         echo "error: $cf-new missing for '$dir'"
         echo "perhaps because you did not run 'verify' first."
-        echo "to create, $0 --verify '$dir'"
+        echo "to create, $0 verify '$dir'"
         echo "skipping '$dir'..."
         problems+=" '$dir': missing $cf-new;"
         return 1
@@ -605,7 +606,7 @@ function mode-accept {
 # Execute mode 'review' in current working directory.
 # This scans the directory to see if there are any subdirectories
 # or files that are newer than the $cf file.  If so, that's 
-# a clear sign that the directory needs --verify.  The main script 
+# a clear sign that the directory needs mode 'verify'.  The main script
 # outputs a suggested commandline.
 # Assumes caller has verified ./$cf exists.
 function mode-review {
@@ -715,7 +716,7 @@ if [ $mode == review ]; then
         echo "No directories appear to need verification."
     else
         echo "NEED VERIFICATION; run the following":
-        echo "$progname --verify $need2review"
+        echo "$progname verify $need2review"
     fi
 fi
 
@@ -725,7 +726,7 @@ if [ "$problems" ]; then
     echo "$additions" | tr \; \\n
     if [ "$need2accept" ]; then
         echo "IFF those changes were acceptable, run the following:"
-        echo "$progname --accept $need2accept"
+        echo "$progname accept $need2accept"
     fi
     exit 5
 else
@@ -740,14 +741,14 @@ else
             echo "study the results carefully before accepting."
         fi
         echo "Thus, the following command is recommended:"
-        echo $progname --accept $need2accept
+        echo $progname accept $need2accept
 
         echo
         echo "The following command is also recommended:"
         if [ $progname == hashcheck ]; then
-            echo metacheck --verify $need2accept
+            echo metacheck verify $need2accept
         else
-            echo hashcheck --verify $need2accept
+            echo hashcheck verify $need2accept
         fi
         # technically not a failure, but exit non-zero to get your attention
         exit 6
