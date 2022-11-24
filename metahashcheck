@@ -268,12 +268,6 @@ function cfcompare {
     # we will later recommend accepting the new $cf for this directory.
     need2accept="$need2accept '$dir'"
 
-#### The following may be needed when Google makes phantom duplicates
-#### PHANTOM
-    echo COPY $cf-new for safekeeping
-    cp $cf-new ~/Desktop/tmp$cf
-####
-
     declare -i added=0 lost=0 changed=0 migrated=0 dup=0
 
     # load the existing checkfile into Old
