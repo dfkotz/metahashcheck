@@ -23,8 +23,12 @@
 # In mode 'verify', we create .metacheck-new or .hashcheck-new
 #   according to current reality, and compare them with existing checkfiles;
 #   any new, changed, or missing files are noted.
+# In mode 'subset', we act like 'verify' but only for a subset of files
+#   listed in the corresponding .metacheck-subset or .hashcheck-subset file.
+#   It is the user's responsibility to create, and later remove, those files.
 # In mode 'sample', we verify only 1% of the files (spot check!);
-#   it works just like 'verify' but probabilistically only 1 out of 100 files.
+#   it works just like 'verify' but probabilistically only 1 out of 100 files,
+#   and does not create any .metacheck-new or .hashcheck-new file.
 # In mode 'accept', we move .metacheck-new or .hashcheck-new to
 #   replace the current checkfiles.
 # In mode 'review', we quickly look to see whether any directory has
@@ -92,7 +96,8 @@ cat <<EOF
    create: create new records from scratch; error if prior records exist.
    expand: add new records for any newly-added files.
    verify: verify files against prior records, and report differences.
-   sample: like verify, but only 1% of files are verified (spot check!)
+   subset: lile verify, but only verify those listed in $cf-subset files.
+   sample: like verify, but only verify random 1% of files (spot check!).
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
    update: add new records (like expand) and alert to missing files.
@@ -104,6 +109,7 @@ case "$1" in
     "create") mode=create;;  # for the first time on a new directory
     "expand") mode=expand;;  # to add entries for newly added files
     "verify") mode=verify;;  # to scan a directory and report changes
+    "subset") mode=subset;;  # to scan certain files in a directory for changes
     "sample") mode=sample;;  # to spot-check a directory for changes
     "accept") mode=accept;;  # to accept results of 'verify'
     "review") mode=review;;  # to review whether 'verify' is needed
@@ -242,7 +248,7 @@ function cfcreate {
 function cfextend {
     if tr \\n \\000 | cfxargs | cat $cf - | sort --key=3 > $cf-new
     then
-        return 0
+       return 0
     else 
         rm -f $cf-new
         return 1
@@ -542,6 +548,72 @@ function mode-verify {
 }
 
 ###################################################################
+# Execute mode 'subset' in current working directory.
+# This mode expect to find a file $cf-subset, adjacent to $cf, containing
+# a list of filenames (one per line) that should be verified.  Thus, it acts
+# like 'verify' but only processes the subset listed in $cf-subset, for
+# efficiency.  Just like 'verify' it prepares file $cf-new that can later
+# be accepted by mode 'accept'.  This mode is useful for hashcheck when
+# it is expected that a handful of files have been modified, requiring
+# the .hashcheck file to be updated ... but without the expnse of hashing all
+# the files in the directory.
+# Assumes caller has verified ./$cf exists; checks whether ./$cf-subset exists.
+function mode-subset {
+    if [ ! -r $cf-subset ]; then
+        problems+=" '$dir': missing (or unreadable) file $cf-subset;"
+        return 1
+    fi
+
+    # build an awk script to help us out
+    echo > $tmp.awk '
+    BEGIN {
+        # expect command-line to define variable SUBSETFILE
+        while (getline line < SUBSETFILE) {
+              # build associative array of lines from that file
+              subset[line] = 1;
+        }
+        close(SUBSETFILE);
+    }
+    {   # for every line of stdin,
+        # extract the filename from the line by removing leading integers
+        filename=$0;
+        sub(/[0-9]* [0-9]* /, "", filename);
+
+        # if it is not in the subset list of files, print the line
+        if (! (filename in subset)) print;
+    }'
+
+    # use the awk script to extract complementary subsets of $cf
+    if awk -v SUBSETFILE=$cf-subset -f $tmp.awk < $cf > $tmp.excluded
+    then
+        true
+    else
+        problems+=" '$dir': awk failed;"
+        return 1
+    fi
+
+    # process that list of files to create new $cf lines for that subset
+    if cat $cf-subset | tr \\n \\000 | cfxargs | sort --key=3 > $tmp.new
+    then
+        # then merge those lines with untouched lines to make $cf-new
+        sort --key=3 $tmp.new $tmp.excluded > $cf-new
+    else
+        problems+=" '$dir': cfxargs failed;"
+        return 2
+    fi
+
+    # determine (and report) what changed, so user can confirm
+    if cfcompare; then
+        # no changes, no need for later 'accept', don't keep $cf-new
+        rm -f $cf-new
+        return 0
+    else
+        # as expected, changes were noted (cfcompare adds notes to $problems)
+        return 0
+    fi
+}
+
+###################################################################
 # Execute mode 'sample' in current working directory.
 # This works like mode 'verify' except we split the existing $cf file into
 # two parts: 1% to be checked, and 99% to be ignored. In this early draft,
@@ -690,6 +762,7 @@ do
         create) mode-create;;
         expand) mode-expand;;
         verify) mode-verify;;
+        subset) mode-subset;;
         sample) mode-sample;;
         accept) mode-accept;;
         review) mode-review;;
