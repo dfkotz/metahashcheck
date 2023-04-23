@@ -345,7 +345,8 @@ function cfcompare {
     # additions are not necessarily a problem, so don't print the names
     for name in "${!NewCol1[@]}"
     do
-        if [[ "oldSize" == "" ]] ; then
+        oldSize=${OldCol2["${name}"]} # file size
+        if [[ "$oldSize" == "" ]] ; then
             # echo "ADDED $name"
             let added++
         fi
