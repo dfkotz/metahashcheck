@@ -80,7 +80,7 @@ cat <<EOF
    create: create new records from scratch; error if prior records exist.
    expand: add new records for any newly-added files.
    verify: verify files against prior records, and report differences.
-   subset: lile verify, but only verify those listed in $cf-subset files.
+   subset: like verify, but only verify those listed in $cf-subset files.
    sample: like verify, but only verify random 1% of files (spot check!).
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
@@ -146,9 +146,9 @@ trap cleanall-and-exit sigint
 # 2 size in bytes
 # 3 filename
 function cfxargs {
-    # Sadly, the 'xargs' and 'stat' commands differ between MacOS/BSD and Linux.
-    # xargs: on MacOS/BSD, empty input does not run the command; on Linux, need -r.
-    # stat: format with -f on MacOS/BSD and -c on Linux, with different %specifiers.
+    # The 'xargs' and 'stat' commands differ between MacOS/BSD and Linux;
+    # xargs: MacOS/BSD, empty input doesn't run the command; on Linux, need -r.
+    # stat: format with -f on MacOS/BSD and -c on Linux, with different %codes.
     if [ $linux == no ]
     then # MacOS or FreeBSD
         if [ $progname == hashcheck ]
@@ -319,7 +319,7 @@ function mode-create {
 ###################################################################
 # Execute either mode 'expand' or 'update' in current working directory.
 # This extends the current $cf file with new records for any new files;
-# it also produces a list of misisng files, like in mode-verify.
+# it also produces a list of missing files, like in mode-verify.
 # It does not verify or re-compute records for existing files.
 # Assumes caller has verified ./$cf exists.
 function mode-expandupdate {
