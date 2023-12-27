@@ -12,8 +12,7 @@
 #  - When run as 'metacheck' it records time & size in '.metacheck' files.
 #
 # Below "checkfiles" and "$cf" refers to .hashcheck or .metacheck files.
-#  .metacheck.* and .hashcheck.* are temporary files used during operation.
-#  .metacheck-* and .hashcheck-* are retained after verify for use by 'accept'.
+#  .metacheck-new .hashcheck-new are retained after verify for use by 'accept'.
 #
 # The first argument is the 'mode' - determining the action to be performed.
 # In mode 'create', we create .metacheck or .hashcheck
