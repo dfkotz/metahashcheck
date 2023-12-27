@@ -2,7 +2,9 @@
 
 A pair of scripts to monitor a tree of immutable files to alert the owner to possible data loss or data corruption.
 
--- David Kotz, 2019-22
+**Warning**: I do not advise using this tool on synchronization-based network drives like Dropbox and Google Drive, because they do not behave well when used with Unix-type tools.  When I last tried it on Google (2022?) there would sometimes appear 'phantom' duplicate files (two files with the same name); in Dropbox (still true as of December 2023) any files that are not cached locally appear to have zero size.
+
+-- David Kotz, 2019-23
 
 ## motivation
 
