@@ -2,7 +2,7 @@
 
 A pair of scripts to monitor a tree of immutable files to alert the owner to possible data loss or data corruption.
 
-**Warning**: I do not advise using this tool on synchronization-based network drives like Dropbox and Google Drive, because they do not behave well when used with Unix-type tools.  When I last tried it on Google (2022?) there would sometimes appear 'phantom' duplicate files (two files with the same name); in Dropbox (still true as of December 2023) any files that are not cached locally appear to have zero size.
+**Warning**: This tool will not work on synchronization-based network drives like Dropbox and Google Drive; see **Limitations** below.
 
 -- David Kotz, 2019-23
 
@@ -194,6 +194,11 @@ echo hashcheck --sample...
 hashcheck --sample "$@" > "$log" \
     || mail -s "hashcheck-sample" $USER < "$log"
 ```
+
+## limitations
+
+This tool will not work on synchronization-based network drives like Dropbox and Google Drive, because those drives do not behave well when used with Unix-type tools.
+See the branch 'google-dropbox' for an archival version that retains code that survives, mostly, under such drives.
 
 ## known bugs
 
