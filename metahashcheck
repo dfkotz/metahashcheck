@@ -41,14 +41,11 @@
 #    http://bayimages.net/blog/lightroom/validator/
 #
 # LIMITATIONS:
-#   When the underlying directories are managed by Dropbox, the file size
-# will (as of 2022) be zero when Dropbox drops it from local storage; this
-# can confuse metacheck. The code may highlight files as "MIGRATED".  It also
-# highlights files that Dropbox restores (thus size changing from zero to
-# non-zero. The limitation is that we do not keep a record of the original
-# file size, and thus metacheck will not detect the situation where Dropbox
-# silently changes the file size. However, hashcheck will catch that case...
-# though one must retrieve from Dropbox a folder before running hashcheck.
+# This tool will not work on synchronization-based network drives like Dropbox
+# and Google Drive, because those drives do not behave well when used with Unix
+# type tools.  (It should be possible to run this tool over a Dropbox folder
+# marked for 'Offline' access - but any folder whose files are, or could be,
+# online will likely cause this tool to fail.)
 #
 
 export LC_ALL=C # ensure consistent sort order with native-byte values
@@ -137,41 +134,6 @@ trap cleanall-and-exit sigint
 ###################################################################
 # next: several functions.  skip down to "main loop" below...
 
-###################################################################
-# Determine whether this file is under Dropbox control and its size
-# has changed from non-zero to zero (as Dropbox removes it from local
-# storage) or from zero to non-zero (as Dropbox restores it).
-# Return 0 if so, non-zero otherwise.
-# Parameters: pathname oldSize newSize
-function dropboxSizeEffect {
-    if [[ $platform != Darwin ]]; then
-        # not on MacOS, thus no Dropbox
-        return 1
-    fi
-
-    # extract command parameters (unquoting $1 as the pathname, in the process)
-    name=$(sed -e "s/'\\\\''/'/g" -e "s/^'//" -e "s/'$//" <<<"$1")
-    oldSize="$2"
-    newSize="$3"
-
-    if (( $oldSize != 0 && $newSize != 0 )); then
-        # both sizes non-zero: this is not a Dropbox effect
-        return 1
-    fi
-
-    if (( $oldSize == 0 && $newSize != 0 )); then
-        # happens during migration out of Dropbox
-        return 0
-    fi
-
-    if ls -l@ "$name" | grep -q com.dropbox ; then
-        # Dropbox attributes present: this file is under Dropbox management
-        return 0
-    else
-        # Dropbox attributes not present: no excuse for change in file size
-        return 1
-    fi
-}
 
 ###################################################################
 # A function to push null-terminated filenames, from stdin,
@@ -292,24 +254,9 @@ function cfcompare {
             echo "LOST $name"
             let lost++
         elif [[ $oldSize -ne $newSize ]] ; then
-            # This situation is tricky; Dropbox can change the file size
-            # to zero when it flushes a file from local storage,
-            # or change it to non-zero when it restores the file.
-            if dropboxSizeEffect "${name}" $oldSize $newSize
-            then
-                # echo "MIGRATED $name"
-                ## comment the following to avoid unnecessary updates
-                ## of the meta/hashcheck files (but it leads to other
-                ## confusing results; a more sophisticated approach is needed)
-                let migrated++
-            else
-                echo "CHANGED $name"
-                let changed++
-            fi
+            echo "CHANGED $name"
+            let changed++
         elif [[ $oldValu -ne $newValu ]] ; then
-            # Unfortunately this comparison is skipped when the sizes differ
-            # due to the Dropbox Size Effect.  It has to be skipped because
-            # the hash is meaningless when the file appears to be empty.
             echo "CHANGED $name"
             let changed++
         fi
