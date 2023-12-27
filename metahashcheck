@@ -679,8 +679,8 @@ fi
 
 if [ "$problems" ]; then
     echo "Warning: errors or changes found in these directories:"
-    echo "$problems" | tr \; \\n
-    echo "$additions" | tr \; \\n
+    echo -n "$problems" | tr \; \\n
+    echo -n "$additions" | tr \; \\n
     if [ "$need2accept" ]; then
         echo "IFF those changes were acceptable, run the following:"
         echo "$progname accept $need2accept"
