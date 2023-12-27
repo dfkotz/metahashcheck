@@ -319,6 +319,9 @@ function mode-create {
 # It does not verify or re-compute records for existing files.
 # Assumes caller has verified ./$cf exists.
 function mode-expandupdate {
+    # delete any cf-new file, so we don't leave behind an outdated file
+    rm -f $cf-new
+
     # first, make a list of filenames in the directory
     if ! ( cflist -print | sort > $tmp.new ); then
         echo "trouble listing files... giving up on '$dir'"
@@ -433,6 +436,7 @@ function mode-verify {
         fi
     else
         problems+=" '$dir': cfcreate failed;"
+        rm -f $cf-new
         return 2
     fi
 }
@@ -449,6 +453,9 @@ function mode-verify {
 # the files in the directory.
 # Assumes caller has verified ./$cf exists; checks whether ./$cf-subset exists.
 function mode-subset {
+    # delete any cf-new file, so we don't leave behind an outdated file
+    rm -f $cf-new
+
     if [ ! -r $cf-subset ]; then
         problems+=" '$dir': missing (or unreadable) file $cf-subset;"
         return 1
@@ -510,6 +517,9 @@ function mode-subset {
 # we do not produce a $cf-new file.
 # Assumes caller has verified ./$cf exists.
 function mode-sample {
+    # delete any cf-new file; it will not be meaningful after this run
+    rm -f $cf-new
+
     # extract a random 1% sample of lines from the $cf file
     awk 'BEGIN {srand()} { if (rand() <= 0.01) { print } }' $cf > $tmp.old
 
@@ -566,6 +576,9 @@ function mode-accept {
 # outputs a suggested commandline.
 # Assumes caller has verified ./$cf exists.
 function mode-review {
+    # delete any cf-new file; it will not be meaningful after this run
+    rm -f $cf-new
+
     echo "reviewing '$dir' for files newer than $cf..."
     if ! newer=$(cflist -newer $cf -print | wc -l); then
         echo "trouble listing files... giving up on '$dir'"
