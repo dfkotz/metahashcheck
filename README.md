@@ -172,7 +172,7 @@ The 'sample' mode works just like 'verify' but it chooses a random subset of 1% 
 Here is a piece of a script I run every day.  It automatically (and silently) adds new photos, but verifies the metadata for all photos and warns me about any missing photos.  (It does not verify the hash of all photos, which would take hours; instead, it verifies a sample of 1% of the files.) It sends me email if `metacheck` or `hashcheck` exit non-zero, i.e., found some trouble.  This could be adapted for use with cron.
 
 ```
-dirs=( ~/Personal/Photos/Lightroom ~/Dropbox/Lightroom )
+# assume $@ (commandline arguments) are a list of directory pathnames
 
 # check photo collections for new files, and add them
 echo metacheck --expand...
