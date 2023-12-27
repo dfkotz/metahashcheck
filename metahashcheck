@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # (bash v4 required)
 #
-# metacheck & hashcheck - David Kotz 2019,20,21,22
+# metacheck & hashcheck - David Kotz 2019-23
 # AVAILABILITY: https://github.com/dfkotz/metahashcheck
 # LICENSE: see LICENSE.md
 # USAGE: see README.md, and function usage() below. 
@@ -223,7 +223,7 @@ function cfcompare {
     # we will later recommend accepting the new $cf for this directory.
     need2accept="$need2accept '$dir'"
 
-    declare -i added=0 lost=0 changed=0 migrated=0 dup=0
+    declare -i added=0 lost=0 changed=0 migrated=0
 
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
