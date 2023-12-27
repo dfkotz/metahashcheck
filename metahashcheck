@@ -223,7 +223,7 @@ function cfcompare {
     # we will later recommend accepting the new $cf for this directory.
     need2accept="$need2accept '$dir'"
 
-    declare -i added=0 lost=0 changed=0 migrated=0
+    declare -i added=0 changed=0 lost=0
 
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
@@ -283,13 +283,10 @@ function cfcompare {
     if [[ $lost -gt 0 ]]; then
         problems+=" '$dir': $lost files lost;"
     fi
-    if [[ $migrated -gt 0 ]]; then
-        problems+=" '$dir': $migrated files migrated;"
-    fi
     
-    # return number of files added, changed, lost, migrated or duplicated
-    echo $added added + $changed changed + $lost lost + $migrated migrated
-    return $(( $added + $changed + $lost + $migrated ))
+    # return number of files added, changed, lost
+    echo $added added + $changed changed + $lost lost
+    return $(( $added + $changed + $lost ))
 }
 
 ###################################################################
