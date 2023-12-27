@@ -218,14 +218,14 @@ function cfcompare {
     if cmp --quiet "$oldFile" "$newFile" ; then
         echo NO ADDITIONS, DELETIONS, OR CHANGES.
         return 0
+    else
+        # something changed, so we need to look more closely.
+        true
     fi
 
-    # something changed, so we need to look more closely.
-    echo SOMETHING CHANGED! 
-    # we will later recommend accepting the new $cf for this directory.
-    need2accept="$need2accept '$dir'"
-
-    declare -i added=0 changed=0 lost=0
+    # make a list of the files added, changed, or lost
+    rm -f $tmp.added $tmp.changed $tmp.lost
+    touch $tmp.added $tmp.changed $tmp.lost
 
     # load the existing checkfile into Old
     declare -A OldCol1 OldCol2
@@ -253,14 +253,11 @@ function cfcompare {
         newSize=${NewCol2["${name}"]} # file size
 
         if [[ "$newSize" == "" ]] ; then
-            echo "LOST $name"
-            let lost++
+            echo "$name" >> $tmp.lost
         elif [[ $oldSize -ne $newSize ]] ; then
-            echo "CHANGED $name"
-            let changed++
+            echo "$name" >> $tmp.changed
         elif [[ $oldValu -ne $newValu ]] ; then
-            echo "CHANGED $name"
-            let changed++
+            echo "$name" >> $tmp.changed
         fi
     done
     
@@ -270,25 +267,44 @@ function cfcompare {
     do
         oldSize=${OldCol2["${name}"]} # file size
         if [[ "$oldSize" == "" ]] ; then
-            # echo "ADDED $name"
-            let added++
+            echo "$name" >> $tmp.added
         fi
     done
 
+    # return number of files added, changed, lost
+    declare -i added=$(wc -l < $tmp.added)
     if [[ $added -gt 0 ]]; then
-        echo "ADDED $added files"
         additions+=" '$dir': $added files added;"
+        echo ADDED $added files
+        # sort $tmp.added
     fi
+
+    declare -i changed=$(wc -l < $tmp.changed)
     if [[ $changed -gt 0 ]]; then
         problems+=" '$dir': $changed files changed;"
+        echo CHANGED $changed files:
+        sort $tmp.changed
     fi
+
+    declare -i lost=$(wc -l < $tmp.lost)
     if [[ $lost -gt 0 ]]; then
         problems+=" '$dir': $lost files lost;"
+        echo LOST $lost files:
+        sort $tmp.lost
     fi
-    
-    # return number of files added, changed, lost
-    echo $added added + $changed changed + $lost lost
-    return $(( $added + $changed + $lost ))
+
+    declare -i changes=$(( $added + $changed + $lost ))
+    if [[ $changes -gt 0 ]]; then
+        # we will later recommend accepting the new $cf for this directory.
+        need2accept="$need2accept '$dir'"
+    else
+        # this should never happen
+        warning="cfcompare found zero changes despite cmp showing diffs"
+        echo "WARNING: $warning"
+        problems+=" '$dir': $warning;"
+    fi
+
+    return $changes
 }
 
 ###################################################################
