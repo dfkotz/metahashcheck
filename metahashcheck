@@ -204,15 +204,18 @@ function cfextend {
 }
 
 ###################################################################
-# A function to compare a new checkfile with existing checkfile;
-# expects to find $cf and $cf-new, each with three columns:
-# 1 checksum(hash) or last-modification-time
-# 2 size in bytes
-# 3 filename
-# and returns 0 on success, non-zero if any changes detected
+# A function to compare an existing checkfile ($1) with new checkfile ($2)
+# each with three columns:
+#  1 checksum(hash) or last-modification-time
+#  2 size in bytes
+#  3 filename
+# It returns 0 on success, non-zero if any changes detected.
+# It updates $need2accept, $additions, and $problems.
 function cfcompare {
+    oldFile="$1"
+    newFile="$2"
     # quickly compare new records with existing records
-    if cmp --quiet $cf $cf-new ; then
+    if cmp --quiet "$oldFile" "$newFile" ; then
         echo NO ADDITIONS, DELETIONS, OR CHANGES.
         return 0
     fi
@@ -230,7 +233,7 @@ function cfcompare {
     do
         OldCol1["${name@Q}"]=$col1;
         OldCol2["${name@Q}"]=$col2;
-    done < $cf
+    done < "$oldFile"
     
     # load the new checkfile into New
     declare -A NewCol1 NewCol2
@@ -238,7 +241,7 @@ function cfcompare {
     do
         NewCol1["${name@Q}"]=$col1;
         NewCol2["${name@Q}"]=$col2;
-    done < $cf-new
+    done < "$newFile"
     
     # loop over all the old files to see what disappeared or changed
     for name in "${!OldCol1[@]}"
@@ -425,7 +428,7 @@ function mode-update {
 # Assumes caller has verified ./$cf exists.
 function mode-verify {
     if cfcreate; then
-        if cfcompare; then
+        if cfcompare $cf $cf-new; then
             # no changes, no need for later 'accept', don't keep $cf-new
             rm -f $cf-new
             return 0
@@ -500,7 +503,7 @@ function mode-subset {
     fi
 
     # determine (and report) what changed, so user can confirm
-    if cfcompare; then
+    if cfcompare $cf $cf-new; then
         # no changes, no need for later 'accept', don't keep $cf-new
         rm -f $cf-new
         return 0
