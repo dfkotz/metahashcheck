@@ -35,6 +35,12 @@
 # In mode 'update', we add new files (like 'expand') but we also
 #   alert to missing files (like 'verify'), but we do not check contents
 #   of existing files.
+# In mode 'backup', we look for a file '.backup' adjacent to the checkfile;
+#   it should contain the path to a backup copy of this directory.  Using only
+#   the checkfiles in this directory and its peer backup directory, determine
+#   what files need to be deleted, copied, or updated to make the backup copy
+#   look like this directory. (This approach works when the backup is Dropbox
+#   and its data files are offline and thus appear to be empty (zero length).)
 #
 # For use in Lightroom, one might also try the following plugin:
 #    http://bayimages.net/blog/lightroom/validator/
@@ -84,6 +90,7 @@ cat <<EOF
    accept: replace prior records with results from a 'verify' pass.
    review: quickly review dir for presence of files newer than records.
    update: add new records (like expand) and alert to missing files.
+   backup: make changes in backup copy to match contents of dir.
 EOF
 }
 
@@ -97,6 +104,7 @@ case "$1" in
     "accept") mode=accept;;  # to accept results of 'verify'
     "review") mode=review;;  # to review whether 'verify' is needed
     "update") mode=update;;  # like 'expand', but alert to missing files
+    "backup") mode=backup;;  # to incrementally update backup copy
     *)  usage; exit 1;;
 esac
 shift
@@ -133,6 +141,12 @@ trap cleanall-and-exit sigint
 ###################################################################
 # next: several functions.  skip down to "main loop" below...
 
+###################################################################
+# Strip leading and trailing single-quote from each line of input
+# (either stdin or a list of files)
+function unquote {
+    sed -e "s/^'//" -e "s/'$//" "$@"
+}
 
 ###################################################################
 # A function to push null-terminated filenames, from stdin,
@@ -204,13 +218,14 @@ function cfextend {
 }
 
 ###################################################################
-# A function to compare an existing checkfile ($1) with new checkfile ($2)
+# A function to compare an old checkfile ($1) with new checkfile ($2)
 # each with three columns:
 #  1 checksum(hash) or last-modification-time
 #  2 size in bytes
 #  3 filename
 # It returns 0 on success, non-zero if any changes detected.
-# It updates $need2accept, $additions, and $problems.
+# It creates $tmp.{added,changeed,lost}, each containing a list of files.
+# It updates $additions and $problems.
 function cfcompare {
     oldFile="$1"
     newFile="$2"
@@ -218,10 +233,9 @@ function cfcompare {
     if cmp --quiet "$oldFile" "$newFile" ; then
         # echo NO ADDITIONS, DELETIONS, OR CHANGES.
         return 0
-    else
-        # something changed, so we need to look more closely.
-        true
     fi
+
+    # something changed, so we need to look more closely.
 
     # make a list of the files added, changed, or lost
     rm -f $tmp.added $tmp.changed $tmp.lost
@@ -294,14 +308,12 @@ function cfcompare {
     fi
 
     declare -i changes=$(( $added + $changed + $lost ))
-    if [[ $changes -gt 0 ]]; then
-        # we will later recommend accepting the new $cf for this directory.
-        need2accept="$need2accept '$dir'"
-    else
+    if [[ $changes -eq 0 ]]; then
         # this should never happen
         warning="cfcompare found zero changes despite cmp showing diffs"
         echo "WARNING: $warning"
         problems+=" '$dir': $warning;"
+        return 99
     fi
 
     return $changes
@@ -449,8 +461,9 @@ function mode-verify {
             rm -f $cf-new
             return 0
         else
-            # some changes were noted (but cfcompare adds notes to $problems)
-            # problems+=" '$dir': cfcompare found differences;"
+            # Some changes (note: cfcompare adds notes to $problems);
+            # we will recommend accepting the new $cf for this directory.
+            need2accept="$need2accept '$dir'"
             return 1
         fi
     else
@@ -524,8 +537,10 @@ function mode-subset {
         rm -f $cf-new
         return 0
     else
-        # as expected, changes were noted (cfcompare adds notes to $problems)
-        return 0
+        # As expected, changes were noted (cfcompare adds notes to $problems).
+        # We will recommend accepting the new $cf for this directory.
+        need2accept="$need2accept '$dir'"
+        return 1
     fi
 }
 
@@ -616,6 +631,85 @@ function mode-review {
 
 
 ###################################################################
+# Execute mode 'backup' in current working directory.
+# Assumes caller has verified ./$cf exists.
+function mode-backup {
+    if [[ -f $cf-new ]]; then
+        echo "ERROR: $cf-new exists - backup canceled:"
+        echo "       perhaps you forgot to '$progname accept' this directory."
+        problems+=" '$dir': FAILED backup;"
+        return 1
+    fi
+
+    # verify presence and contents of .backup
+    if [[ ! -f .backup ]]; then
+        echo "ERROR: missing file '.backup' - backup canceled:"
+        echo "       it should contain full pathname of backup directory"
+        problems+=" '$dir': FAILED backup;"
+        return 2
+    else
+        backup=$(<.backup)
+        if [[ ! -d "$backup" ]]; then
+            echo "ERROR: '.backup' not a directory: $backup"
+            problems+=" '$dir': FAILED backup;"
+            return 3
+        fi
+        if [[ ! "$backup" == /* ]]; then
+            echo "ERROR: '.backup' not a full path: $backup"
+            problems+=" '$dir': FAILED backup;"
+            return 4
+        fi
+        if [[ ! -f "$backup/$cf" ]]; then
+            echo "ERROR: missing $cf in $backup"
+            problems+=" '$dir': FAILED backup;"
+            return 5
+        fi
+    fi
+
+    # compare the old (backup) to new (current)
+    # (note: cfcompare adds notes to $additions and $problems)
+    if cfcompare "$backup/$cf" "./$cf"; then
+        # no changes
+        return 0
+    fi
+
+    # ask permission to reflect the changes into the backup
+    echo -n "Reflect those changes in $backup? "
+    read answer
+    if [[ ! "$answer" == [yY] ]]; then
+        echo "CANCELED: no changes to $backup"
+        problems+=" '$dir': CANCELED backup;"
+        return 6
+    fi
+
+    # delete the 'lost' files
+    if [[ -s $tmp.lost ]]; then
+        if (cd "$backup" && unquote $tmp.lost | tr \\n \\0 | xargs -0 rm -f);
+        then
+            echo "Deleted $(wc -l < $tmp.lost) files from $backup"
+        else
+            echo "FAILED to delete files from $backup"
+            problems+=" '$dir': FAILED backup;"
+            return 7
+        fi
+    fi
+
+    # make a bill of materials and rsync the added/changed files
+    echo $cf > $tmp.bom
+    unquote $tmp.added $tmp.changed >> $tmp.bom
+    if rsync -a --files-from=$tmp.bom . "$backup/"; then
+        echo "Added/changed $(wc -l < $tmp.bom) files in $backup"
+    else
+        echo "FAILED to add/change files in $backup"
+        problems+=" '$dir': FAILED backup;"
+        return 8
+    fi
+
+    problems=""
+    return 0
+}
+
+###################################################################
 ######################### main loop ###############################
 
 # build 'dirs', a list of directories to process, watching for errors
@@ -664,10 +758,8 @@ if [ "$problems" ]; then
     exit 4
 fi
 
-# prepare to loop over the directories
+# Execute the desired subcommand over all directories
 ndirs=${#dirs[@]}
-    
-# loop over all dirs, processing each directory independently
 for dir in "${dirs[@]}"
 do
     echo $ndirs directories remaining to examine
@@ -688,6 +780,7 @@ do
         accept) mode-accept;;
         review) mode-review;;
         update) mode-update;;
+        backup) mode-backup;;
         *) ;;
     esac
     
