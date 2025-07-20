@@ -753,6 +753,10 @@ else
     done
 fi
 
+if [ "$dirs" == "" ]; then
+    problems+="ERROR: no directories found"
+fi
+
 if [ "$problems" ]; then
     echo "$problems" | tr \; \\n
     exit 4
